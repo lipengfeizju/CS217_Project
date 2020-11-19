@@ -1,0 +1,5 @@
+h5py==3.1.0
+numpy==1.18.1
+torch==1.5.0
+# Uncomment when you have a GUI end
+# open3d==0.9.0.0
