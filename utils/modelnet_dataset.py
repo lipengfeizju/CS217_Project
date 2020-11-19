@@ -30,7 +30,7 @@ class ModelNetDataset():
         if modelnet10:
             self.catfile = os.path.join(self.root, 'modelnet10_shape_names.txt')
         else:
-            self.catfile = os.path.join(self.root, 'shape_names.txt')
+            self.catfile = os.path.join(self.root, 'modelnet40_shape_names.txt')
         self.cat = [line.rstrip() for line in open(self.catfile)]
         self.classes = dict(zip(self.cat, range(len(self.cat))))  
         self.normal_channel = normal_channel
@@ -129,13 +129,16 @@ class ModelNetDataset():
         return batch_data, batch_label
     
 if __name__ == '__main__':
-    d = ModelNetDataset(root = '../data/modelnet40_normal_resampled', split='test')
+    root_dir = "/home/anny/workspace/CS217_Project/data/modelnet40_normal_resampled"
+    d = ModelNetDataset(root = root_dir, split='test')
     print(d.shuffle)
     print(len(d))
     import time
     tic = time.time()
+    from visualize import visualize_point_cloud
     for i in range(10):
         ps, cls = d[i]
+        visualize_point_cloud(ps)
     print(time.time() - tic)
     print(ps.shape, type(ps), cls)
 
