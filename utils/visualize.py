@@ -12,5 +12,10 @@ def visualize_point_cloud(point_array):
     vis.run()
     vis.destroy_window()
 
+def test():
+    point_set = np.loadtxt("data/samples/airplane_0001.txt",delimiter=',').astype(np.float32)
+    point_set = point_set[:,:3]
+    visualize_point_cloud(point_set)
+
 if __name__ == "__main__":
-    pass
+    test()
