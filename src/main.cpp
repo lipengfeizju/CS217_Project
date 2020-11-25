@@ -35,7 +35,7 @@ int main(int argc, char *argv[]){
     std::random_device rd;
     std::mt19937 gen(rd());
 
-    std::string file_name = "/Users/lipengfei/CLionProjects/icp/data/samples/airplane_0000.txt";
+    std::string file_name = "data/samples/airplane_0000.txt";
     MatrixXd pcl_data = load_pcl(file_name);
     int num_point = pcl_data.rows();
 
@@ -71,7 +71,7 @@ int main(int argc, char *argv[]){
     // shuffle
     my_random_shuffle(B);
     
-    save_pcl("/Users/lipengfei/CLionProjects/icp/data/samples/airplane_0000_rotated.txt",B);
+    save_pcl("data/samples/airplane_0000_rotated.txt",B);
 
     /******** Calculate ICP ***********/
     start = GetTickCount();
@@ -105,7 +105,7 @@ int main(int argc, char *argv[]){
 
 
     std::cout << "Writing recovered point cloud data to file" << std::endl;
-    save_pcl("/Users/lipengfei/CLionProjects/icp/data/samples/airplane_0000_recovered.txt",D);
+    save_pcl("data/samples/airplane_0000_recovered.txt",D);
 
     return 0;
 }
