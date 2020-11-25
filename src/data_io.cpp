@@ -6,7 +6,7 @@
 using namespace Eigen;
 
 
-MatrixXd load_pcl(char *file_name, int col ){
+MatrixXd load_pcl(std::string file_name, int col ){
 
     int counter = 0;
 
@@ -37,7 +37,7 @@ MatrixXd load_pcl(char *file_name, int col ){
     return pcl_matrix;
 }
 
-void save_pcl(char *file_name, MatrixXd& pcl_data){
+void save_pcl(std::string file_name, MatrixXd& pcl_data){
     std::ofstream pcl_file (file_name);
     int cols = pcl_data.cols();
     int rows = pcl_data.rows();
