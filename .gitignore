@@ -2,3 +2,8 @@ temp/**
 data/**
 .vscode/*
 **.pyc
+.idea/**
+cmake-build-debug
+.DS_Store
+build/**
+src/test.cpp
