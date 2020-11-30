@@ -1,9 +1,18 @@
+# Ignore file format
+**._.DS_Store
+**.pyc
+**.DS_Store
+
+# Ignore Dir
 temp/**
 data/**
-.vscode/*
-**.pyc
-.idea/**
-cmake-build-debug
-.DS_Store
+.vscode/**
 build/**
+.idea/**
+cmake-build-debug/**
+
+
 src/test.cpp
+
+
+

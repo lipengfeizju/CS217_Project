@@ -18,7 +18,7 @@ def visualize_point_cloud(point_array, color_array = None):
     vis.destroy_window()
 
 def test():
-    point_set = np.loadtxt("data/samples/airplane_0000_test.txt",delimiter=',').astype(np.float32)
+    point_set = np.loadtxt("data/samples/airplane_0000.txt",delimiter=',').astype(np.float32)
     point_set = point_set[:,:3]
 
     num_point = point_set.shape[0]
