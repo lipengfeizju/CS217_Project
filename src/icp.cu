@@ -42,9 +42,6 @@ __global__ void nearest_neighbor_kernel(const double * src, const double * dst, 
     //Step 0: Initialize variables
     
     for(int j = 0; j < num_src_pts_per_thread; j++){
-        // int i = 0; 
-        // i = blockIdx.x;
-        // current_index_src =  i * blockDim.x * num_src_pts_per_thread + j * blockDim.x + threadIdx.x;
         current_index_src =  blockIdx.x * blockDim.x * num_src_pts_per_thread + j * blockDim.x + threadIdx.x;
         if (current_index_src < src_count){
             best_dist[current_index_src] = INF;  //INF
@@ -52,21 +49,12 @@ __global__ void nearest_neighbor_kernel(const double * src, const double * dst, 
         }
             
     }
-    
-    // for(int i = 0; i < gridDim.x; i++){
-    //     //int i = 0;
-    //     //for(int j = 0; j < num_src_pts_per_thread; j++){
-    //         for(int k = 0; k < num_dst_pts_per_block; k++){
-    //             current_index_dst = i * blockDim.x * num_dst_pts_per_thread + k;
-    //             best_dist[current_index_dst] = INF; //0
-    //         }
-    //     //}
-    // }
-    
+    //printf("test");
     __syncthreads();
-//
-//   //TODO : remove redundant loop
-   for(int i = 0; i < gridDim.x; i++){
+
+    int num_data_chunk = (src_count - 1)/(num_src_pts_per_thread * blockDim.x) + 1;
+
+    for(int i = 0; i < num_data_chunk; i++){
        //Step 1: Copy part of dst points to shared memory
        for(int j = 0; j < num_dst_pts_per_thread; j++){
             // Memory coalescing index
@@ -104,9 +92,6 @@ __global__ void nearest_neighbor_kernel(const double * src, const double * dst, 
                    dist = dist_GPU(x1, y1, z1, x2, y2, z2);
                    if(dist < best_dist[current_index_src]){
                        best_dist[current_index_src] = dist;
-                       // TODO: index rotating for current_index_dst
-                       //current_index_dst = i * blockDim.x * num_dst_pts_per_thread + k * num_dst_pts_per_thread + threadIdx.x;
-                       ///TBD
                        current_index_dst = i * blockDim.x * num_dst_pts_per_thread + k;
                        best_neighbor[current_index_src] = current_index_dst;
                    }
@@ -156,11 +141,8 @@ __host__ NEIGHBOR nearest_neighbor_cuda(const Eigen::MatrixXd &src, const Eigen:
     check_return_status(cudaMemcpy(dst_device, dst_host, 3 * row_dst * sizeof(double), cudaMemcpyHostToDevice));
 
     int num_dst_pts_per_thread = (row_dst - 1)/(GRID_SIZE * BLOCK_SIZE) + 1;
-    // int num_src_pts_per_thread = (row_src - 1)/(GRID_SIZE * BLOCK_SIZE) + 1;
     
     int dyn_size_1 = num_dst_pts_per_thread * BLOCK_SIZE * 3 * sizeof(double);  // memory reserved for shared_points
-    // int dyn_size_2 = num_src_pts_per_thread * BLOCK_SIZE * sizeof(double);      // memory reserved for min_dis
-    // int dyn_size_3 = num_src_pts_per_thread * BLOCK_SIZE * sizeof(int);         // memory reserved for min_ind
 
     nearest_neighbor_kernel<<<GRID_SIZE, BLOCK_SIZE, (dyn_size_1) >>>(src_device, dst_device, row_src, row_dst, best_neighbor_device, best_dist_device);
     
@@ -174,41 +156,11 @@ __host__ NEIGHBOR nearest_neighbor_cuda(const Eigen::MatrixXd &src, const Eigen:
         neigh.indices.push_back(best_neighbor_host[i]);
     }
     
-    //safe_exit();
     free(best_neighbor_host);
     free(best_dist_host);
     cudaFree(src_device);
     cudaFree(dst_device);
     cudaFree(best_neighbor_device);
     cudaFree(best_dist_device);
-
-
-    // Eigen::Vector3d vec_src;
-    // Eigen::Vector3d vec_dst;
-    // NEIGHBOR neigh;
-    // float min = 100;
-    // int index = 0;
-    // float dist_temp = 0;
-
-    // for(int ii=0; ii < row_src; ii++){
-    //     vec_src = src.block<1,3>(ii,0).transpose();
-    //     min = 100;
-    //     index = 0;
-    //     dist_temp = 0;
-    //     for(int jj=0; jj < row_dst; jj++){
-    //         vec_dst = dst.block<1,3>(jj,0).transpose();
-    //         dist_temp = dist(vec_src,vec_dst);
-    //         if (dist_temp < min){
-    //             min = dist_temp;
-    //             index = jj;
-    //         }
-    //     }
-    //     // cout << min << " " << index << endl;
-    //     // neigh.distances[ii] = min;
-    //     // neigh.indices[ii] = index;
-    //     neigh.distances.push_back(min);
-    //     neigh.indices.push_back(index);
-    // }
-
     return neigh;
 }

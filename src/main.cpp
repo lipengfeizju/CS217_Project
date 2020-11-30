@@ -65,7 +65,6 @@ int main(int argc, char *argv[]){
     }
 
     R = rotation_matrix(Vector3d::Random() ,my_random()*rotation);
-    std:cout << R << std::endl;
     B = (R * B.transpose()).transpose();
 
     B += MatrixXd::Random(num_point,3) * noise_sigma;

@@ -34,8 +34,6 @@ void verify(NEIGHBOR neigbor1, NEIGHBOR neigbor2){
 
 }
 
-
-
 Eigen::Matrix4d transform_SVD(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B){
     /*
      * min ||B- RA||
