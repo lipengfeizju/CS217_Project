@@ -3,8 +3,36 @@
 #include "icp.h"
 #include "Eigen/Eigen"
 
+#define USE_GPU true
 using namespace std;
-using namespace Eigen;
+//using namespace Eigen;
+
+/*
+typedef struct{
+    std::vector<float> distances;
+    std::vector<int> indices;
+} NEIGHBOR;
+*/
+void verify(NEIGHBOR neigbor1, NEIGHBOR neigbor2){
+    if(!(neigbor1.distances.size() == neigbor2.distances.size() && 
+         neigbor1.indices.size() == neigbor2.indices.size() &&
+         neigbor1.distances.size() == neigbor1.indices.size()
+        )){
+        std::cout << "Neighbor size not match" <<std::endl;
+        exit(-1);
+    }
+    int num_pts = neigbor1.distances.size();
+    for(int i = 0; i < num_pts; i++){
+        if(neigbor1.distances[i] - neigbor2.distances[i] > 1e-20 ||
+            neigbor1.indices[i] != neigbor2.indices[i]){
+            std::cout << "Neighbor result not match: " << i << std::endl;
+            std::cout << "neighbor 1 " << neigbor1.distances[i] << ", " << neigbor1.indices[i] << std::endl;
+            std::cout << "neighbor 2 " << neigbor2.distances[i] << ", " << neigbor2.indices[i] << std::endl;
+            exit(-1);
+        }
+    }
+
+}
 
 
 
@@ -39,7 +67,7 @@ Eigen::Matrix4d transform_SVD(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B
     Eigen::Matrix3d R;
     Eigen::Vector3d t;
 
-    JacobiSVD<Eigen::MatrixXd> svd(H, ComputeFullU | ComputeFullV);
+    Eigen::JacobiSVD<Eigen::MatrixXd> svd(H, Eigen::ComputeFullU | Eigen::ComputeFullV);
     U = svd.matrixU();
     S = svd.singularValues();
     V = svd.matrixV();
@@ -76,6 +104,7 @@ ICP_OUT icp(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B, int max_iteratio
     //Eigen::MatrixXd dst = Eigen::MatrixXd::Ones(3+1,row);
 
     NEIGHBOR neighbor;
+    //NEIGHBOR neighbor_cpu;
     Eigen::Matrix4d T;
     Eigen::MatrixXd dst_chorder = Eigen::MatrixXd::Ones(3,row);
     ICP_OUT result;
@@ -91,8 +120,22 @@ ICP_OUT icp(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B, int max_iteratio
     double prev_error = 0;
     double mean_error = 0;
     for (int i=0; i<max_iterations; i++){
+        // double * vc = dst.data();
+        // for(int j = 0; j < 10; j++)
+        //     std::cout << vc[j] << ", ";
+        // std::cout << std::endl << std::endl;
+        // std::cout << dst(all, seqN(0,4)) << std::endl;
 
-        neighbor = nearest_neighbor(src3d.transpose(), dst.transpose());
+        //neighbor_cpu      = nearest_neighbor(src3d.transpose(), dst.transpose());
+        if(USE_GPU)
+            neighbor = nearest_neighbor_cuda(src3d.transpose(), dst.transpose());
+        else
+            neighbor = nearest_neighbor(src3d.transpose(), dst.transpose());
+        // verify(neighbor, neighbor_test);
+        // std::cout << "So far so good, keep going !\n";
+        // exit(0);
+
+        //verify(neighbor, neighbor_test);
 
         // Calculate mean error and compare with previous error
         mean_error = std::accumulate(neighbor.distances.begin(),neighbor.distances.end(),0.0)/neighbor.distances.size();
@@ -100,13 +143,13 @@ ICP_OUT icp(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B, int max_iteratio
             break;
         }
 
-        dst_chorder(Eigen::seqN(0,3), all) = dst(Eigen::seqN(0,3), neighbor.indices);
+        dst_chorder(Eigen::seqN(0,3), Eigen::all) = dst(Eigen::seqN(0,3), neighbor.indices);
 
         T = transform_SVD(src3d.transpose(),dst_chorder.transpose());
 
         src = T*src;
         // Copy first 3 rows to src3d
-        src3d(all, all) = src(seqN(0,3), all);
+        src3d(Eigen::all, Eigen::all) = src(Eigen::seqN(0,3), Eigen::all);
 
         prev_error = mean_error;
         iter = i+2;
@@ -139,7 +182,7 @@ NEIGHBOR nearest_neighbor(const Eigen::MatrixXd &src, const Eigen::MatrixXd &dst
 
     for(int ii=0; ii < row_src; ii++){
         vec_src = src.block<1,3>(ii,0).transpose();
-        min = 100;
+        min = INF;
         index = 0;
         dist_temp = 0;
         for(int jj=0; jj < row_dst; jj++){
