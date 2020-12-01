@@ -27,7 +27,11 @@ ICP_OUT icp(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B, int max_iteratio
 
 // throughout method
 NEIGHBOR nearest_neighbor(const Eigen::MatrixXd &src, const Eigen::MatrixXd &dst);
-NEIGHBOR nearest_neighbor_cuda(const Eigen::MatrixXd &src, const Eigen::MatrixXd &dst);
 float dist(const Eigen::Vector3d &pta, const Eigen::Vector3d &ptb);
 
+// CUDA speedup method
+NEIGHBOR nearest_neighbor_cuda(const Eigen::MatrixXd &src, const Eigen::MatrixXd &dst);
+double   nearest_neighbor_xxxx(const Eigen::MatrixXd &src, const Eigen::MatrixXd &dst);
+double ICP_single_step_cuda(const Eigen::MatrixXd &dst,  Eigen::MatrixXd &dst_chorder, const NEIGHBOR &neighbor);
+//double ICP_single_step_cuda(const Eigen::MatrixXd &dst, const Eigen::MatrixXd &dst_chorder );
 #endif

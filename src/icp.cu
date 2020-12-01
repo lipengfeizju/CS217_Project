@@ -164,3 +164,48 @@ __host__ NEIGHBOR nearest_neighbor_cuda(const Eigen::MatrixXd &src, const Eigen:
     cudaFree(best_dist_device);
     return neigh;
 }
+
+__global__ void point_array_chorder(const double *src, double *src_chorder, const int *indices, int num_points){
+    int num_point_per_thread = (num_points - 1)/(gridDim.x * blockDim.x) + 1;
+    int current_index = 0;
+    int target_index = 0;
+
+    for(int j = 0; j < num_point_per_thread; j++){
+        current_index =  blockIdx.x * blockDim.x * num_point_per_thread + j * blockDim.x + threadIdx.x;
+        if (current_index < num_points){
+            target_index = indices[current_index];
+            src_chorder[current_index]                 =  src[target_index];     //x
+            src_chorder[current_index + num_points  ]  =  src[target_index + num_points  ];     //y
+            src_chorder[current_index + num_points*2]  =  src[target_index + num_points*2];     //z
+        }
+    }
+}
+double ICP_single_step_cuda(const Eigen::MatrixXd &dst,  Eigen::MatrixXd &dst_chorder, const NEIGHBOR &neighbor){
+    assert(dst.rows() == dst_chorder.rows());
+    assert(dst.cols() == dst_chorder.cols());
+    assert(dst.cols() == 3);
+    assert(dst.rows() == neighbor.indices.size());
+
+    int num_data_pts = dst.rows();
+    double *dst_chorder_device;
+    double *dst_device;
+    int *neighbor_device;
+
+    const double *dst_host         = dst.data();
+    double *dst_chorder_host = dst_chorder.data();
+    
+    
+    check_return_status(cudaMalloc((void**)&dst_device        , 3 * num_data_pts * sizeof(double)));
+    check_return_status(cudaMalloc((void**)&dst_chorder_device, 3 * num_data_pts * sizeof(double)));
+    check_return_status(cudaMalloc((void**)&neighbor_device   , num_data_pts * sizeof(int)));
+
+    check_return_status(cudaMemcpy(dst_device, dst_host, 3 * num_data_pts * sizeof(double), cudaMemcpyHostToDevice));
+    check_return_status(cudaMemcpy(neighbor_device, &(neighbor.indices[0]),  num_data_pts * sizeof(int), cudaMemcpyHostToDevice));
+    
+
+    point_array_chorder<<<GRID_SIZE, BLOCK_SIZE>>>(dst_device, dst_chorder_device, neighbor_device, num_data_pts);
+    
+    check_return_status(cudaMemcpy(dst_chorder_host, dst_chorder_device, 3 * num_data_pts * sizeof(double), cudaMemcpyDeviceToHost));
+    
+    return 0;
+}
