@@ -194,7 +194,7 @@ __global__ void cast_float_to_double(const float *src, double *dst, int num_poin
 
 __host__ double cal_T_matrix_cuda(const Eigen::MatrixXf &dst,  const Eigen::MatrixXf &src, Eigen::MatrixXd &H_matrix, const NEIGHBOR &neighbor){
 
-    assert(H_matrix.rows() == 3 && H_matrix.cols() == 4);
+    assert(H_matrix.rows() == 4 && H_matrix.cols() == 4);
     assert(src.rows() == dst.rows());// && dst.rows() == dst_chorder.rows());
     assert(src.cols() == dst.cols());// && dst.cols() == dst_chorder.cols());
     assert(dst.cols() == 3);
@@ -373,12 +373,18 @@ __host__ double cal_T_matrix_cuda(const Eigen::MatrixXf &dst,  const Eigen::Matr
 
     /*************         final transformation         ********************/
     double *trans_matrix_device;
-    check_return_status(cudaMalloc((void**)&trans_matrix_device, 3 * 4 * sizeof(double)));
+    check_return_status(cudaMalloc((void**)&trans_matrix_device, 4 * 4 * sizeof(double)));
+    // Set the last value to one
+    double temp_one = 1;
+    check_return_status(cublasSetVector(1, sizeof(double), &temp_one, 1, trans_matrix_device + 15, 1));
+
 
     for( int i = 0; i< 3; i++){
-        check_return_status(cublasDcopy(handle, 3, rot_matrix_device + i * 3, 1, trans_matrix_device + i * 3, 1));
+        check_return_status(cublasDcopy(handle, 3, rot_matrix_device + i * 3, 1, trans_matrix_device + i * 4, 1));
     }
-    check_return_status(cublasDcopy(handle, 3, t_matrix_device, 1, trans_matrix_device + 9, 1));
+    check_return_status(cublasDcopy(handle, 3, t_matrix_device, 1, trans_matrix_device + 12, 1));
+
+    //cublasSetVector(1, sizeof(double), ones_host, 1, trans_matrix_device, 1)
 
     // Destroy the handle
     cublasDestroy(handle);
@@ -386,7 +392,7 @@ __host__ double cal_T_matrix_cuda(const Eigen::MatrixXf &dst,  const Eigen::Matr
 
 
     // Final result copy back
-    check_return_status(cudaMemcpy(gpu_temp_res, trans_matrix_device, 3 * 4 * sizeof(double), cudaMemcpyDeviceToHost));
+    check_return_status(cudaMemcpy(gpu_temp_res, trans_matrix_device, 4 * 4 * sizeof(double), cudaMemcpyDeviceToHost));
 
     return 0;
 }

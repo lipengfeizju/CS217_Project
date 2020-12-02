@@ -83,7 +83,7 @@ ICP_OUT icp(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B, int max_iteratio
 
     double temp = 0;
     Eigen::MatrixXd T_temp = Eigen::MatrixXd::Identity(4,4);  // free to change
-    Eigen::MatrixXd gpu_temp_res = Eigen::MatrixXd::Ones(3, 4);// free to change
+    Eigen::MatrixXd gpu_temp_res = Eigen::MatrixXd::Ones(4, 4);// free to change
     Eigen::MatrixXf dstf = dst.cast<float>();
     Eigen::MatrixXf src3df = src3d.cast<float>();
 
@@ -127,7 +127,8 @@ ICP_OUT icp(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B, int max_iteratio
         T.block<3,1>(0,3) = t;
 
         temp = cal_T_matrix_cuda(dstf.transpose(), src3df.transpose(), gpu_temp_res, neighbor);
-        T_temp(Eigen::seqN(0,3), Eigen::all) = gpu_temp_res.cast<double>();
+        T_temp(Eigen::all, Eigen::all) = gpu_temp_res.cast<double>();
+        //T_temp(Eigen::seqN(0,3), Eigen::all) = gpu_temp_res.cast<double>();
 
         std::cout <<std::endl << T_temp <<std::endl;
         std::cout <<std::endl << T <<std::endl;
