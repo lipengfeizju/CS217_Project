@@ -3,7 +3,7 @@
 #include "icp.h"
 #include "Eigen/Eigen"
 
-#define USE_GPU false
+#define USE_GPU true
 using namespace std;
 
 void verify(NEIGHBOR neigbor1, NEIGHBOR neigbor2){
@@ -37,7 +37,7 @@ void verify(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B){
     int row = A.rows(), col = B.cols();
     for(int i = 0; i < row; i++){
         for(int j = 0; j < col; j++){
-            if(abs(A(i,j) - B(i,j)) > 1e-7){
+            if(abs(A(i,j) - B(i,j)) > 1e-6){
                 std::cout <<"Matrx data not match!!!!!!     "<< i << ", " << j << ": " << 
                 A(i,j) << ", " << B(i,j) <<  ", " << A(i,j) -B(i,j) << std::endl;
                 exit(-1);
@@ -82,63 +82,65 @@ ICP_OUT icp(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B, int max_iteratio
     prev_error = std::accumulate(neighbor.distances.begin(),neighbor.distances.end(),0.0)/neighbor.distances.size();
 
     double temp = 0;
-    Eigen::MatrixXd T_temp = Eigen::MatrixXd::Identity(4,4);  // free to change
-    Eigen::MatrixXd gpu_temp_res = Eigen::MatrixXd::Ones(4, 4);// free to change
+    Eigen::MatrixXd point_temp = Eigen::MatrixXd::Ones(4, row);  // free to change
+    Eigen::MatrixXf gpu_temp_res = Eigen::MatrixXf::Ones(row, 4);// free to change
     Eigen::MatrixXf dstf = dst.cast<float>();
     Eigen::MatrixXf src3df = src3d.cast<float>();
 
     
     for (int i=0; i<max_iterations; i++){
         
-        dst_chorder(Eigen::seqN(0,3), Eigen::all) = dst(Eigen::seqN(0,3), neighbor.indices);
-        
-        Eigen::Vector3d centroid_A(0,0,0);
-        Eigen::Vector3d centroid_B(0,0,0);
-        Eigen::MatrixXd A_zm = src3d.transpose(); // Zero mean version of A
-        Eigen::MatrixXd B_zm = dst_chorder.transpose(); // Zero mean version of B
-        int row = src3d.cols();
-
-        centroid_A = src3d.rowwise().sum() / row;
-        centroid_B = dst_chorder.rowwise().sum() / row;
-
-        A_zm.rowwise() -= centroid_A.transpose();
-        B_zm.rowwise() -= centroid_B.transpose();
-        Eigen::MatrixXd H = A_zm.transpose()*B_zm;
-
-        
-        Eigen::JacobiSVD<Eigen::MatrixXd> svd(H, Eigen::ComputeFullU | Eigen::ComputeFullV);
-        Eigen::MatrixXd U = svd.matrixU();
-        Eigen::VectorXd S = svd.singularValues();
-        Eigen::MatrixXd V = svd.matrixV();
-        Eigen::MatrixXd Vt = V.transpose();
-
-
-        Eigen::Matrix3d R = Vt.transpose()*U.transpose();
-
-
-        if (R.determinant() < 0 ){
-            Vt.block<1,3>(2,0) *= -1;
-            R = Vt.transpose()*U.transpose();
+        if(USE_GPU){
+            apply_optimal_transform_cuda(dstf.transpose(), src3df.transpose(), gpu_temp_res, neighbor);
+            src = point_temp(Eigen::all, Eigen::all) = gpu_temp_res.transpose().cast<double>();
         }
-        Eigen::MatrixXd t = centroid_B - R*centroid_A;
-
-        Eigen::Matrix4d T = Eigen::MatrixXd::Identity(4,4);
-        T.block<3,3>(0,0) = R;
-        T.block<3,1>(0,3) = t;
-
-        temp = cal_T_matrix_cuda(dstf.transpose(), src3df.transpose(), gpu_temp_res, neighbor);
-        T_temp(Eigen::all, Eigen::all) = gpu_temp_res.cast<double>();
-        //T_temp(Eigen::seqN(0,3), Eigen::all) = gpu_temp_res.cast<double>();
-
-        std::cout <<std::endl << T_temp <<std::endl;
-        std::cout <<std::endl << T <<std::endl;
+           
+        else{
+            dst_chorder(Eigen::seqN(0,3), Eigen::all) = dst(Eigen::seqN(0,3), neighbor.indices);
         
-        verify(T_temp, T);
-        std::cout << "So far so good, keep going !\n";
-        exit(0);    
+            Eigen::Vector3d centroid_A(0,0,0);
+            Eigen::Vector3d centroid_B(0,0,0);
+            Eigen::MatrixXd A_zm = src3d.transpose(); // Zero mean version of A
+            Eigen::MatrixXd B_zm = dst_chorder.transpose(); // Zero mean version of B
+            int row = src3d.cols();
+
+            centroid_A = src3d.rowwise().sum() / row;
+            centroid_B = dst_chorder.rowwise().sum() / row;
+
+            A_zm.rowwise() -= centroid_A.transpose();
+            B_zm.rowwise() -= centroid_B.transpose();
+            Eigen::MatrixXd H = A_zm.transpose()*B_zm;
+
+            
+            Eigen::JacobiSVD<Eigen::MatrixXd> svd(H, Eigen::ComputeFullU | Eigen::ComputeFullV);
+            Eigen::MatrixXd U = svd.matrixU();
+            Eigen::VectorXd S = svd.singularValues();
+            Eigen::MatrixXd V = svd.matrixV();
+            Eigen::MatrixXd Vt = V.transpose();
 
 
-        src = T*src;
+            Eigen::Matrix3d R = Vt.transpose()*U.transpose();
+
+
+            if (R.determinant() < 0 ){
+                Vt.block<1,3>(2,0) *= -1;
+                R = Vt.transpose()*U.transpose();
+            }
+            Eigen::MatrixXd t = centroid_B - R*centroid_A;
+
+            Eigen::Matrix4d T = Eigen::MatrixXd::Identity(4,4);
+            T.block<3,3>(0,0) = R;
+            T.block<3,1>(0,3) = t;
+            src = T*src;
+
+            // temp = cal_T_matrix_cuda(dstf.transpose(), src3df.transpose(), gpu_temp_res, neighbor);
+            // point_temp(Eigen::all, Eigen::all) = gpu_temp_res.transpose().cast<double>();
+            
+            // verify(src, point_temp);
+            // std::cout << "So far so good, keep going !\n";
+            // exit(0); 
+        }
+        
         // Copy first 3 rows to src3d
         src3d(Eigen::all, Eigen::all) = src(Eigen::seqN(0,3), Eigen::all);
 
