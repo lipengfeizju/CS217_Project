@@ -192,22 +192,115 @@ __global__ void cast_float_to_double(const float *src, double *dst, int num_poin
     }
 }
 
-// __host__ void best_trasnform_SVD(cublasHandle_t handle, const float *src_zm_device, const float *dst_chorder_zm_device, int num_data_pts, float *H_matrix_device){
+__host__ void best_trasnform_SVD(cublasHandle_t handle, cusolverDnHandle_t solver_handle, const float *src_zm_device, const float *dst_chorder_zm_device, const float *sum_device_src, const float *sum_device_dst, int num_data_pts, double *trans_matrix_device){
+
+    const float alf = 1;
+    const float bet = 0;
+    // const float *alpha = &alf;
+    // const float *beta = &bet;
+
+
+    /***********************            Calculate H matrix            **********************************/
+    float *H_matrix_device;
+    check_return_status(cudaMalloc((void**)&H_matrix_device, 3 * 3 * sizeof(float)));
+
+    // src_zm_device(N,3) dst_chorder_zm_device(N,3)
+    // src_zm_device.T  *  dst_chorder_zm_device
+    // cublasSgemm(handle, CUBLAS_OP_T, CUBLAS_OP_N, N, K, M, &alpha, A, M, A, M, &beta, B, N);
+    // A(MxN) K = N  A'(N,M)
+    int m = 3, k = num_data_pts, n = 3;
+    int lda=k, ldb=k, ldc=m;
+    check_return_status(cublasSgemm(handle, CUBLAS_OP_T, CUBLAS_OP_N, m, n, k, &alf, src_zm_device, lda, dst_chorder_zm_device, ldb, &bet, H_matrix_device, ldc));
+    //print_matrix_device<<<1,1>>>(H_matrix_device, 3, 3);
     
-//     /***********************            Calculate H matrix            **********************************/
-//     // float *H_matrix_device;
-//     // check_return_status(cudaMalloc((void**)&H_matrix_device, 3 * 3 * sizeof(float)));
 
-//     // src_zm_device(N,3) dst_chorder_zm_device(N,3)
-//     // src_zm_device.T  *  dst_chorder_zm_device
-//     // cublasSgemm(handle, CUBLAS_OP_T, CUBLAS_OP_N, N, K, M, &alpha, A, M, A, M, &beta, B, N);
-//     // A(MxN) K = N  A'(N,M)
-//     m = 3; k = num_data_pts; n = 3;
-//     lda=k; ldb=k; ldc=m;
-//     check_return_status(cublasSgemm(handle, CUBLAS_OP_T, CUBLAS_OP_N, m, n, k, alpha, src_zm_device, lda, dst_chorder_zm_device, ldb, beta, H_matrix_device, ldc));
-//     //print_matrix_device<<<1,1>>>(H_matrix_device, 3, 3);
+    /****************************   SVD decomposition for trans_matrix   *****************************/
+    // --- gesvd only supports Nrows >= Ncols
+    // --- column major memory ordering
 
-// }
+    const int Nrows = 3;
+    const int Ncols = 3;
+
+    // --- cuSOLVE input/output parameters/arrays
+    int work_size = 0;
+    int *devInfo;           check_return_status(cudaMalloc(&devInfo,          sizeof(int)));
+
+    // --- Setting the device matrix and moving the host matrix to the device
+    double *d_A;            check_return_status(cudaMalloc(&d_A,      Nrows * Ncols * sizeof(double)));
+    cast_float_to_double<<<1,1>>>(H_matrix_device, d_A, Nrows * Ncols);
+
+    
+    // --- device side SVD workspace and matrices
+    double *d_U;            check_return_status(cudaMalloc(&d_U,  Nrows * Nrows     * sizeof(double)));
+    double *d_Vt;            check_return_status(cudaMalloc(&d_Vt,  Ncols * Ncols     * sizeof(double)));
+    double *d_S;            check_return_status(cudaMalloc(&d_S,  min(Nrows, Ncols) * sizeof(double)));
+
+    // --- CUDA SVD initialization
+    check_return_status(cusolverDnDgesvd_bufferSize(solver_handle, Nrows, Ncols, &work_size));
+    double *work;   check_return_status(cudaMalloc(&work, work_size * sizeof(double)));
+
+    // --- CUDA SVD execution
+    check_return_status(cusolverDnDgesvd(solver_handle, 'A', 'A', Nrows, Ncols, d_A, Nrows, d_S, d_U, Nrows, d_Vt, Ncols, work, work_size, NULL, devInfo));
+    int devInfo_h = 0;  check_return_status(cudaMemcpy(&devInfo_h, devInfo, sizeof(int), cudaMemcpyDeviceToHost));
+    if (devInfo_h != 0) std::cout   << "Unsuccessful SVD execution\n\n";
+    check_return_status(cudaFree(work));
+    check_return_status(cudaFree(devInfo));
+
+    check_return_status(cudaFree(H_matrix_device));
+    check_return_status(cudaFree(d_A));
+    check_return_status(cudaFree(d_S));
+
+    /**************************      calculating rotation matrix       ******************************/
+    const double alfd = 1;
+    const double betd = 0;
+    const double *alphad = &alfd;
+    const double *betad = &betd;
+
+    double *rot_matrix_device;
+    check_return_status(cudaMalloc((void**)&rot_matrix_device, 3 * 3 * sizeof(double)));
+
+    m = 3; k = 3; n = 3;
+    lda=k; ldb=k; ldc=m;
+    // Vt.transpose()*U.transpose();
+    check_return_status(cublasDgemm(handle, CUBLAS_OP_T, CUBLAS_OP_T, m, n, k, alphad, d_Vt, lda, d_U, ldb, betad, rot_matrix_device, ldc));
+    check_return_status(cudaFree(d_Vt));
+    check_return_status(cudaFree(d_U));
+
+    /***************************      calculating translation matrix    ******************************/
+    double *t_matrix_device;
+    check_return_status(cudaMalloc((void**)&t_matrix_device, 3 * sizeof(double)));
+
+    m = 3; k = 3; n = 1; //(m,k), (k,n)  -> (m, n)
+    lda=m; ldb=k; ldc=m;
+    double *sum_device_src_d;            check_return_status(cudaMalloc(&sum_device_src_d, 3 * sizeof(double)));
+    cast_float_to_double<<<1,1>>>(sum_device_src, sum_device_src_d, 3);
+    check_return_status(cublasDgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, m, n, k, alphad, rot_matrix_device, lda, sum_device_src_d, ldb, betad, t_matrix_device, ldc));
+    check_return_status(cudaFree(sum_device_src_d));
+
+    const double scale_trans = -1;
+    check_return_status(cublasDscal(handle, 3, &scale_trans, t_matrix_device, 1));
+
+    double *sum_device_dst_d;            check_return_status(cudaMalloc(&sum_device_dst_d, 3 * sizeof(double)));
+    cast_float_to_double<<<1,1>>>(sum_device_dst, sum_device_dst_d, 3);
+    const double scale_trans_1 = 1;
+    check_return_status(cublasDaxpy(handle, 3, &scale_trans_1, sum_device_dst_d, 1, t_matrix_device, 1));
+    check_return_status(cudaFree(sum_device_dst_d));
+
+    const double avg_trans = 1/(1.0*num_data_pts);
+    check_return_status(cublasDscal(handle, 3, &avg_trans, t_matrix_device, 1));
+
+    /*************         final transformation         ********************/
+    // Set the last value to one
+    double temp_one = 1;
+    check_return_status(cublasSetVector(1, sizeof(double), &temp_one, 1, trans_matrix_device + 15, 1));
+    for( int i = 0; i< 3; i++){
+        check_return_status(cublasDcopy(handle, 3, rot_matrix_device + i * 3, 1, trans_matrix_device + i * 4, 1));
+    }
+    check_return_status(cublasDcopy(handle, 3, t_matrix_device, 1, trans_matrix_device + 12, 1));
+    check_return_status(cudaFree(rot_matrix_device));
+    check_return_status(cudaFree(t_matrix_device));
+
+}
 
 __host__ double cal_T_matrix_cuda(const Eigen::MatrixXf &dst,  const Eigen::MatrixXf &src, Eigen::MatrixXd &H_matrix, const NEIGHBOR &neighbor){
 
@@ -312,116 +405,19 @@ __host__ double cal_T_matrix_cuda(const Eigen::MatrixXf &dst,  const Eigen::Matr
     double *trans_matrix_device;
     check_return_status(cudaMalloc((void**)&trans_matrix_device, 4 * 4 * sizeof(double)));
     
-
-    /***********************            Calculate H matrix            **********************************/
-    float *H_matrix_device;
-    check_return_status(cudaMalloc((void**)&H_matrix_device, 3 * 3 * sizeof(float)));
-
-    // src_zm_device(N,3) dst_chorder_zm_device(N,3)
-    // src_zm_device.T  *  dst_chorder_zm_device
-    // cublasSgemm(handle, CUBLAS_OP_T, CUBLAS_OP_N, N, K, M, &alpha, A, M, A, M, &beta, B, N);
-    // A(MxN) K = N  A'(N,M)
-    m = 3; k = num_data_pts; n = 3;
-    lda=k; ldb=k; ldc=m;
-    check_return_status(cublasSgemm(handle, CUBLAS_OP_T, CUBLAS_OP_N, m, n, k, alpha, src_zm_device, lda, dst_chorder_zm_device, ldb, beta, H_matrix_device, ldc));
-    //print_matrix_device<<<1,1>>>(H_matrix_device, 3, 3);
-    
-
-    /****************************   SVD decomposition for trans_matrix   *****************************/
-    // --- gesvd only supports Nrows >= Ncols
-    // --- column major memory ordering
-
-    const int Nrows = 3;
-    const int Ncols = 3;
-
-    // --- cuSOLVE input/output parameters/arrays
-    int work_size = 0;
-    int *devInfo;           check_return_status(cudaMalloc(&devInfo,          sizeof(int)));
-
-    // --- Setting the device matrix and moving the host matrix to the device
-    double *d_A;            check_return_status(cudaMalloc(&d_A,      Nrows * Ncols * sizeof(double)));
-    cast_float_to_double<<<1,1>>>(H_matrix_device, d_A, Nrows * Ncols);
-
-    
-    // --- device side SVD workspace and matrices
-    double *d_U;            check_return_status(cudaMalloc(&d_U,  Nrows * Nrows     * sizeof(double)));
-    double *d_Vt;            check_return_status(cudaMalloc(&d_Vt,  Ncols * Ncols     * sizeof(double)));
-    double *d_S;            check_return_status(cudaMalloc(&d_S,  min(Nrows, Ncols) * sizeof(double)));
-
-    // --- CUDA SVD initialization
-    check_return_status(cusolverDnDgesvd_bufferSize(solver_handle, Nrows, Ncols, &work_size));
-    double *work;   check_return_status(cudaMalloc(&work, work_size * sizeof(double)));
-
-    // --- CUDA SVD execution
-    check_return_status(cusolverDnDgesvd(solver_handle, 'A', 'A', Nrows, Ncols, d_A, Nrows, d_S, d_U, Nrows, d_Vt, Ncols, work, work_size, NULL, devInfo));
-    int devInfo_h = 0;  check_return_status(cudaMemcpy(&devInfo_h, devInfo, sizeof(int), cudaMemcpyDeviceToHost));
-    if (devInfo_h != 0) std::cout   << "Unsuccessful SVD execution\n\n";
-    check_return_status(cudaFree(work));
-    check_return_status(cudaFree(devInfo));
-
-    check_return_status(cudaFree(H_matrix_device));
-    check_return_status(cudaFree(d_A));
-    check_return_status(cudaFree(d_S));
-
-    /**************************      calculating rotation matrix       ******************************/
-    const double alfd = 1;
-    const double betd = 0;
-    const double *alphad = &alfd;
-    const double *betad = &betd;
-
-    double *rot_matrix_device;
-    check_return_status(cudaMalloc((void**)&rot_matrix_device, 3 * 3 * sizeof(double)));
-
-    m = 3; k = 3; n = 3;
-    lda=k; ldb=k; ldc=m;
-    // Vt.transpose()*U.transpose();
-    check_return_status(cublasDgemm(handle, CUBLAS_OP_T, CUBLAS_OP_T, m, n, k, alphad, d_Vt, lda, d_U, ldb, betad, rot_matrix_device, ldc));
-    check_return_status(cudaFree(d_Vt));
-    check_return_status(cudaFree(d_U));
-
-    /***************************      calculating translation matrix    ******************************/
-    double *t_matrix_device;
-    check_return_status(cudaMalloc((void**)&t_matrix_device, 3 * sizeof(double)));
-
-    m = 3; k = 3; n = 1; //(m,k), (k,n)  -> (m, n)
-    lda=m; ldb=k; ldc=m;
-    double *sum_device_src_d;            check_return_status(cudaMalloc(&sum_device_src_d, 3 * sizeof(double)));
-    cast_float_to_double<<<1,1>>>(sum_device_src, sum_device_src_d, 3);
-    check_return_status(cublasDgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, m, n, k, alphad, rot_matrix_device, lda, sum_device_src_d, ldb, betad, t_matrix_device, ldc));
-    check_return_status(cudaFree(sum_device_src_d));
-
-    const double scale_trans = -1;
-    check_return_status(cublasDscal(handle, 3, &scale_trans, t_matrix_device, 1));
-
-    double *sum_device_dst_d;            check_return_status(cudaMalloc(&sum_device_dst_d, 3 * sizeof(double)));
-    cast_float_to_double<<<1,1>>>(sum_device_dst, sum_device_dst_d, 3);
-    const double scale_trans_1 = 1;
-    check_return_status(cublasDaxpy(handle, 3, &scale_trans_1, sum_device_dst_d, 1, t_matrix_device, 1));
-    check_return_status(cudaFree(sum_device_dst_d));
-
-    const double avg_trans = 1/(1.0*num_data_pts);
-    check_return_status(cublasDscal(handle, 3, &avg_trans, t_matrix_device, 1));
-
-    /*************         final transformation         ********************/
-    // Set the last value to one
-    double temp_one = 1;
-    check_return_status(cublasSetVector(1, sizeof(double), &temp_one, 1, trans_matrix_device + 15, 1));
-    for( int i = 0; i< 3; i++){
-        check_return_status(cublasDcopy(handle, 3, rot_matrix_device + i * 3, 1, trans_matrix_device + i * 4, 1));
-    }
-    check_return_status(cublasDcopy(handle, 3, t_matrix_device, 1, trans_matrix_device + 12, 1));
-    check_return_status(cudaFree(rot_matrix_device));
-    check_return_status(cudaFree(t_matrix_device));
-
+    best_trasnform_SVD(handle, solver_handle, src_zm_device, dst_chorder_zm_device, sum_device_src, sum_device_dst, num_data_pts, trans_matrix_device);
     //cublasSetVector(1, sizeof(double), ones_host, 1, trans_matrix_device, 1)
 
     // Destroy the handle
     cublasDestroy(handle);
     cusolverDnDestroy(solver_handle);
 
-
     // Final result copy back
     check_return_status(cudaMemcpy(gpu_temp_res, trans_matrix_device, 4 * 4 * sizeof(double), cudaMemcpyDeviceToHost));
 
+
+
+    check_return_status(cudaFree(trans_matrix_device));
+    
     return 0;
 }
