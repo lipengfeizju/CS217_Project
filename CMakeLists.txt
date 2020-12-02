@@ -8,6 +8,7 @@ include_directories(.)
 
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --expt-relaxed-constexpr")
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -g -G")
+
 #set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -g -G")
 
 add_library(data_io SHARED src/data_io.cpp)
@@ -23,4 +24,4 @@ add_executable(registration  src/main.cpp)
 # set_property(TARGET registration PROPERTY CUDA_ARCHITECTURES 75)    # For Debug only
 
 target_link_libraries(registration
-                    icp data_io icp_cuda)
+                    icp data_io icp_cuda -lcublas)
