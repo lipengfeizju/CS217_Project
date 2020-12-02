@@ -32,6 +32,6 @@ float dist(const Eigen::Vector3d &pta, const Eigen::Vector3d &ptb);
 // CUDA speedup method
 NEIGHBOR nearest_neighbor_cuda(const Eigen::MatrixXd &src, const Eigen::MatrixXd &dst);
 
-double cal_T_matrix_cuda(const Eigen::MatrixXf &dst,  const Eigen::MatrixXf &src, Eigen::MatrixXf &H_matrix, const NEIGHBOR &neighbor);
+double cal_T_matrix_cuda(const Eigen::MatrixXf &dst,  const Eigen::MatrixXf &src, Eigen::MatrixXd &H_matrix, const NEIGHBOR &neighbor);
 //double ICP_single_step_cuda(const Eigen::MatrixXd &dst, const Eigen::MatrixXd &dst_chorder );
 #endif

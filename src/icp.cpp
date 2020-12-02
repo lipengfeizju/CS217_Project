@@ -37,10 +37,14 @@ void verify(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B){
     int row = A.rows(), col = B.cols();
     for(int i = 0; i < row; i++){
         for(int j = 0; j < col; j++){
-            if(abs(A(i,j) - B(i,j) > 1e-5)){
+            if(abs(A(i,j) - B(i,j)) > 1e-7){
                 std::cout <<"Matrx data not match!!!!!!     "<< i << ", " << j << ": " << 
                 A(i,j) << ", " << B(i,j) <<  ", " << A(i,j) -B(i,j) << std::endl;
                 exit(-1);
+            }
+            else{
+                std::cout <<"OK  "<< i << ", " << j << ": " << 
+                A(i,j) << ", " << B(i,j) <<  ", " << A(i,j) -B(i,j) << std::endl;
             }
         }
     }
@@ -60,7 +64,7 @@ ICP_OUT icp(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B, int max_iteratio
     ICP_OUT result;
     int iter = 0;
 
-
+    
     src(Eigen::seqN(0,3), Eigen::all) = A.transpose();
     src3d(Eigen::seqN(0,3), Eigen::all) = A.transpose();
 
@@ -78,8 +82,8 @@ ICP_OUT icp(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B, int max_iteratio
     prev_error = std::accumulate(neighbor.distances.begin(),neighbor.distances.end(),0.0)/neighbor.distances.size();
 
     double temp = 0;
-    Eigen::MatrixXd H_temp = Eigen::MatrixXd::Ones(3, 3);  // free to change
-    Eigen::MatrixXf gpu_temp_res = Eigen::MatrixXf::Ones(3, 3);// free to change
+    Eigen::MatrixXd T_temp = Eigen::MatrixXd::Identity(4,4);  // free to change
+    Eigen::MatrixXd gpu_temp_res = Eigen::MatrixXd::Ones(3, 4);// free to change
     Eigen::MatrixXf dstf = dst.cast<float>();
     Eigen::MatrixXf src3df = src3d.cast<float>();
 
@@ -101,19 +105,13 @@ ICP_OUT icp(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B, int max_iteratio
         B_zm.rowwise() -= centroid_B.transpose();
         Eigen::MatrixXd H = A_zm.transpose()*B_zm;
 
-        temp = cal_T_matrix_cuda(dstf.transpose(), src3df.transpose(), gpu_temp_res, neighbor);
-        std::cout <<std::endl << gpu_temp_res <<std::endl;
-        H_temp(Eigen::all, Eigen::all) = gpu_temp_res.cast<double>();
         
-        verify(H, H_temp);
-        std::cout << "So far so good, keep going !\n";
-        exit(0);
-
         Eigen::JacobiSVD<Eigen::MatrixXd> svd(H, Eigen::ComputeFullU | Eigen::ComputeFullV);
         Eigen::MatrixXd U = svd.matrixU();
         Eigen::VectorXd S = svd.singularValues();
         Eigen::MatrixXd V = svd.matrixV();
         Eigen::MatrixXd Vt = V.transpose();
+
 
         Eigen::Matrix3d R = Vt.transpose()*U.transpose();
 
@@ -122,12 +120,21 @@ ICP_OUT icp(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B, int max_iteratio
             Vt.block<1,3>(2,0) *= -1;
             R = Vt.transpose()*U.transpose();
         }
-
-        Eigen::Vector3d t = centroid_B - R*centroid_A;
+        Eigen::MatrixXd t = centroid_B - R*centroid_A;
 
         Eigen::Matrix4d T = Eigen::MatrixXd::Identity(4,4);
         T.block<3,3>(0,0) = R;
         T.block<3,1>(0,3) = t;
+
+        temp = cal_T_matrix_cuda(dstf.transpose(), src3df.transpose(), gpu_temp_res, neighbor);
+        T_temp(Eigen::seqN(0,3), Eigen::all) = gpu_temp_res.cast<double>();
+
+        std::cout <<std::endl << T_temp <<std::endl;
+        std::cout <<std::endl << T <<std::endl;
+        
+        verify(T_temp, T);
+        std::cout << "So far so good, keep going !\n";
+        exit(0);    
 
 
         src = T*src;

@@ -1,7 +1,9 @@
 // Copyright: Pengfei Li
 // Email: pli081@ucr.edu
 #include <iostream>
+#include <string>
 #include <cublas_v2.h>
+#include <cusolverDn.h>
 
 void check_return_status(cudaError_t cuda_ret){
     if(cuda_ret != cudaSuccess){
@@ -22,6 +24,43 @@ void check_return_status(cublasStatus_t cublas_ret){
         std::cout << "CUBLAS Returned error! please check"<< std::endl;
         exit(-1);
     }
+}
+void check_return_status(cusolverStatus_t error)
+{
+    if (error != CUSOLVER_STATUS_SUCCESS){
+        std::string error_message;
+        switch (error)
+        {
+            case CUSOLVER_STATUS_SUCCESS:
+                error_message = "CUSOLVER_SUCCESS";
+
+            case CUSOLVER_STATUS_NOT_INITIALIZED:
+                error_message = "CUSOLVER_STATUS_NOT_INITIALIZED";
+
+            case CUSOLVER_STATUS_ALLOC_FAILED:
+                error_message = "CUSOLVER_STATUS_ALLOC_FAILED";
+
+            case CUSOLVER_STATUS_INVALID_VALUE:
+                error_message = "CUSOLVER_STATUS_INVALID_VALUE";
+
+            case CUSOLVER_STATUS_ARCH_MISMATCH:
+                error_message = "CUSOLVER_STATUS_ARCH_MISMATCH";
+
+            case CUSOLVER_STATUS_EXECUTION_FAILED:
+                error_message = "CUSOLVER_STATUS_EXECUTION_FAILED";
+
+            case CUSOLVER_STATUS_INTERNAL_ERROR:
+                error_message = "CUSOLVER_STATUS_INTERNAL_ERROR";
+
+            case CUSOLVER_STATUS_MATRIX_TYPE_NOT_SUPPORTED:
+                error_message = "CUSOLVER_STATUS_MATRIX_TYPE_NOT_SUPPORTED";
+        }
+        error_message = "<unknown>";
+        std::cout << "CUBLAS Returned error! please check:"<< std::endl;
+        std::cout << error_message<< std::endl;
+        exit(-1);
+    }
+    
 }
 
 __global__ void print_matrix_device(const float *A, int nr_rows_A, int nr_cols_A) {

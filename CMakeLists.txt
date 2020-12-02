@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.15)
 project(icp  LANGUAGES CXX CUDA)
 
 set(CMAKE_CXX_STANDARD 14)
-#SET(CMAKE_BUILD_TYPE "Debug")
+SET(CMAKE_BUILD_TYPE "Debug")
 
 include_directories(.)
 
@@ -24,4 +24,4 @@ add_executable(registration  src/main.cpp)
 # set_property(TARGET registration PROPERTY CUDA_ARCHITECTURES 75)    # For Debug only
 
 target_link_libraries(registration
-                    icp data_io icp_cuda -lcublas)
+                    icp data_io icp_cuda -lcublas -lcusolver)
