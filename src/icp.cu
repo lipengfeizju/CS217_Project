@@ -12,7 +12,7 @@
 #define BLOCK_SIZE 16
 #define GRID_SIZE 16
 
-
+#include <cublas_v2.h>
 
 __device__ double dist_GPU(double x1, double y1, double z1, 
                          double x2, double y2, double z2){
@@ -165,7 +165,7 @@ __host__ NEIGHBOR nearest_neighbor_cuda(const Eigen::MatrixXd &src, const Eigen:
     return neigh;
 }
 
-__global__ void point_array_chorder(const double *src, double *src_chorder, const int *indices, int num_points){
+__global__ void point_array_chorder(const float *src, float *src_chorder, const int *indices, int num_points){
     int num_point_per_thread = (num_points - 1)/(gridDim.x * blockDim.x) + 1;
     int current_index = 0;
     int target_index = 0;
@@ -180,32 +180,125 @@ __global__ void point_array_chorder(const double *src, double *src_chorder, cons
         }
     }
 }
-double ICP_single_step_cuda(const Eigen::MatrixXd &dst,  Eigen::MatrixXd &dst_chorder, const NEIGHBOR &neighbor){
-    assert(dst.rows() == dst_chorder.rows());
-    assert(dst.cols() == dst_chorder.cols());
+
+__host__ double cal_T_matrix_cuda(const Eigen::MatrixXf &dst,  const Eigen::MatrixXf &src, Eigen::MatrixXf &H_matrix, const NEIGHBOR &neighbor){
+
+    assert(H_matrix.rows() == 3 && H_matrix.cols() == 3);
+    assert(src.rows() == dst.rows());// && dst.rows() == dst_chorder.rows());
+    assert(src.cols() == dst.cols());// && dst.cols() == dst_chorder.cols());
     assert(dst.cols() == 3);
     assert(dst.rows() == neighbor.indices.size());
 
+
     int num_data_pts = dst.rows();
-    double *dst_chorder_device;
-    double *dst_device;
+    float *dst_chorder_device;
+    float *dst_device, *src_device;
     int *neighbor_device;
 
-    const double *dst_host         = dst.data();
-    double *dst_chorder_host = dst_chorder.data();
+    const float *dst_host         = dst.data();
+    const float *src_host         = src.data();
+    float *gpu_temp_res           = H_matrix.data();
     
     
-    check_return_status(cudaMalloc((void**)&dst_device        , 3 * num_data_pts * sizeof(double)));
-    check_return_status(cudaMalloc((void**)&dst_chorder_device, 3 * num_data_pts * sizeof(double)));
+    check_return_status(cudaMalloc((void**)&dst_device        , 3 * num_data_pts * sizeof(float)));
+    check_return_status(cudaMalloc((void**)&src_device        , 3 * num_data_pts * sizeof(float)));
+    check_return_status(cudaMalloc((void**)&dst_chorder_device, 3 * num_data_pts * sizeof(float)));
     check_return_status(cudaMalloc((void**)&neighbor_device   , num_data_pts * sizeof(int)));
 
-    check_return_status(cudaMemcpy(dst_device, dst_host, 3 * num_data_pts * sizeof(double), cudaMemcpyHostToDevice));
+    check_return_status(cudaMemcpy(dst_device, dst_host, 3 * num_data_pts * sizeof(float), cudaMemcpyHostToDevice));
+    check_return_status(cudaMemcpy(src_device, src_host, 3 * num_data_pts * sizeof(float), cudaMemcpyHostToDevice));
     check_return_status(cudaMemcpy(neighbor_device, &(neighbor.indices[0]),  num_data_pts * sizeof(int), cudaMemcpyHostToDevice));
     
 
     point_array_chorder<<<GRID_SIZE, BLOCK_SIZE>>>(dst_device, dst_chorder_device, neighbor_device, num_data_pts);
     
-    check_return_status(cudaMemcpy(dst_chorder_host, dst_chorder_device, 3 * num_data_pts * sizeof(double), cudaMemcpyDeviceToHost));
+    const float alf = 1;
+    const float bet = 0;
+    const float *alpha = &alf;
+    const float *beta = &bet;
+
+
+    // Matrix calculation
+    // Create a handle for CUBLAS
+    cublasHandle_t handle;
+    cublasCreate(&handle);
+
     
+    float *ones_host = (float *)malloc(num_data_pts*sizeof(float));
+    for(int i = 0; i< num_data_pts; i++){
+        ones_host[i] = 1;}
+    float *average_host = (float *)malloc(3*sizeof(float));
+    float *ones_device, *average_device;
+    
+    check_return_status(cudaMalloc((void**)&ones_device, num_data_pts * sizeof(float)));
+    check_return_status(cudaMalloc((void**)&average_device, 3 * sizeof(float)));
+    check_return_status(cublasSetVector(num_data_pts, sizeof(float), ones_host, 1, ones_device, 1));
+    
+    /*******************************  zero center dst point array    *****************************************/
+    // Do the actual multiplication 
+    // op ( A ) m × k , op ( B ) k × n and C m × n ,
+    // cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, m, n, k, alpha, A, lda, B, ldb, beta, C, ldc);
+    int m = 1, k = num_data_pts, n = 3;
+    int lda=m,ldb=k,ldc=m;
+    check_return_status(cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, m, n, k, alpha, ones_device, lda, dst_chorder_device, ldb, beta, average_device, ldc));
+    //print_matrix_device<<<1,1>>>(dst_chorder_device, k, n);
+    
+    cublasGetVector(3, sizeof(float), average_device, 1, average_host, 1);
+    
+    for(int i = 0; i < 3; i++)  average_host[i] /= num_data_pts;
+    // std::cout << average_host[0] << ", " << average_host[1] << ", "  << average_host[2] << std::endl;
+    
+    float *dst_chorder_zm_device;
+    check_return_status(cudaMalloc((void**)&dst_chorder_zm_device, 3 * num_data_pts * sizeof(float)));
+    check_return_status(cudaMemcpy(dst_chorder_zm_device, dst_chorder_device, 3 * num_data_pts * sizeof(float), cudaMemcpyDeviceToDevice));
+    
+    for(int i = 0; i < 3; i++)
+    {
+        const float avg = -average_host[i];
+        check_return_status(cublasSaxpy(handle, num_data_pts, &avg, ones_device, 1, dst_chorder_zm_device + i*num_data_pts, 1));
+    }
+
+    /******************************   zero center dst point array    ************************************/
+    m = 1, k = num_data_pts, n = 3;
+    lda=m,ldb=k,ldc=m;
+    check_return_status(cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, m, n, k, alpha, ones_device, lda, src_device, ldb, beta, average_device, ldc));
+    
+    cublasGetVector(3, sizeof(float), average_device, 1, average_host, 1);
+    for(int i = 0; i < 3; i++)  average_host[i] /= num_data_pts;
+    // std::cout << average_host[0] << ", " << average_host[1] << ", "  << average_host[2] << std::endl;
+
+    float *src_zm_device;
+    check_return_status(cudaMalloc((void**)&src_zm_device, 3 * num_data_pts * sizeof(float)));
+    check_return_status(cudaMemcpy(src_zm_device, src_device, 3 * num_data_pts * sizeof(float), cudaMemcpyDeviceToDevice));
+    
+    for(int i = 0; i < 3; i++)
+    {
+        const float avg = -average_host[i];
+        check_return_status(cublasSaxpy(handle, num_data_pts, &avg, ones_device, 1, src_zm_device + i*num_data_pts, 1));
+    }
+
+    /*********************************************************/
+    
+
+    float *trans_matrix_device;
+    check_return_status(cudaMalloc((void**)&trans_matrix_device, 3 * 3 * sizeof(float)));
+
+    // src_zm_device(N,3) dst_chorder_zm_device(N,3)
+    // src_zm_device.T  *  dst_chorder_zm_device
+
+    //cublasSgemm(handle, CUBLAS_OP_T, CUBLAS_OP_N, N, K, M, &alpha, A, M, A, M, &beta, B, N);
+    //A(MxN) K = N  A'(N,M)
+    m = 3; k = num_data_pts; n = 3;
+    lda=k; ldb=k; ldc=m;
+    check_return_status(cublasSgemm(handle, CUBLAS_OP_T, CUBLAS_OP_N, m, n, k, alpha, src_zm_device, lda, dst_chorder_zm_device, ldb, beta, trans_matrix_device, ldc));
+    print_matrix_device<<<1,1>>>(trans_matrix_device, 3, 3);
+    /*********************************************************/
+    
+
+    //check_return_status(cudaMemcpy(gpu_temp_res, src_zm_device, 3 * num_data_pts * sizeof(float), cudaMemcpyDeviceToHost));
+    check_return_status(cudaMemcpy(gpu_temp_res, trans_matrix_device, 3 * 3 * sizeof(float), cudaMemcpyDeviceToHost));
+    // Destroy the handle
+    cublasDestroy(handle);
+
     return 0;
 }
