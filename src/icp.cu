@@ -107,6 +107,17 @@ __global__ void nearest_neighbor_kernel(const double * src, const double * dst, 
    }
     
 }
+
+__host__ void nearest_neighbor_cuda_warper(const double *src_device, const double *dst_device, int row_src, int row_dst, double *best_dist_device, int *best_neighbor_device){
+
+    int num_dst_pts_per_thread = (row_dst - 1)/(GRID_SIZE * BLOCK_SIZE) + 1;
+    
+    int dyn_size_1 = num_dst_pts_per_thread * BLOCK_SIZE * 3 * sizeof(double);  // memory reserved for shared_points
+
+    nearest_neighbor_kernel<<<GRID_SIZE, BLOCK_SIZE, (dyn_size_1) >>>(src_device, dst_device, row_src, row_dst, best_neighbor_device, best_dist_device);
+
+}
+
 // Host function to prepare data
 __host__ NEIGHBOR nearest_neighbor_cuda(const Eigen::MatrixXd &src, const Eigen::MatrixXd &dst){
     /*
@@ -119,6 +130,7 @@ __host__ NEIGHBOR nearest_neighbor_cuda(const Eigen::MatrixXd &src, const Eigen:
     
     int row_src = src.rows();
     int row_dst = dst.rows();
+    assert(row_src == row_src);
 
     // const double * vc = dst.data();
     // for(int j = 0; j < 10; j++)
@@ -145,14 +157,8 @@ __host__ NEIGHBOR nearest_neighbor_cuda(const Eigen::MatrixXd &src, const Eigen:
     check_return_status(cudaMemcpy(src_device, src_host, 3 * row_src * sizeof(double), cudaMemcpyHostToDevice));
     check_return_status(cudaMemcpy(dst_device, dst_host, 3 * row_dst * sizeof(double), cudaMemcpyHostToDevice));
 
-    int num_dst_pts_per_thread = (row_dst - 1)/(GRID_SIZE * BLOCK_SIZE) + 1;
+    nearest_neighbor_cuda_warper(src_device, dst_device, row_src, row_dst, best_dist_device, best_neighbor_device);
     
-    int dyn_size_1 = num_dst_pts_per_thread * BLOCK_SIZE * 3 * sizeof(double);  // memory reserved for shared_points
-
-    nearest_neighbor_kernel<<<GRID_SIZE, BLOCK_SIZE, (dyn_size_1) >>>(src_device, dst_device, row_src, row_dst, best_neighbor_device, best_dist_device);
-    
-    
-
     check_return_status(cudaMemcpy(best_neighbor_host, best_neighbor_device, row_src * sizeof(int), cudaMemcpyDeviceToHost));
     check_return_status(cudaMemcpy(best_dist_host    , best_dist_device    , row_src * sizeof(double), cudaMemcpyDeviceToHost));
     
@@ -328,6 +334,52 @@ __host__ void zero_center_points(cublasHandle_t handle, const float *point_array
 
 }
 
+__host__ void apply_optimal_transform_cuda_warper(cublasHandle_t handle, cusolverDnHandle_t solver_handle, const float *dst_device, const float *src_device, const int *neighbor_device, const float *ones_device, int num_data_pts,
+        float *dst_chorder_device, float *dst_chorder_zm_device, float *src_zm_device, float *sum_device_dst, float *sum_device_src,
+        float *src_4d_t_device, float *src_4d_device
+    ){
+
+    /*****************************   change order based on the nearest neighbor ******************************/
+    point_array_chorder<<<GRID_SIZE, BLOCK_SIZE>>>(dst_device, dst_chorder_device, neighbor_device, num_data_pts);
+        
+    /******************************   Calculate Transformation with SVD    ************************************/
+    zero_center_points(handle, dst_chorder_device, ones_device, num_data_pts, dst_chorder_zm_device, sum_device_dst);
+    zero_center_points(handle, src_device, ones_device, num_data_pts, src_zm_device, sum_device_src);
+    
+    double *trans_matrix_device; //matrix size is (4,4)
+    check_return_status(cudaMalloc((void**)&trans_matrix_device, 4 * 4 * sizeof(double)));
+    
+    best_trasnform_SVD(handle, solver_handle, src_zm_device, dst_chorder_zm_device, sum_device_src, sum_device_dst, num_data_pts, trans_matrix_device);
+    
+
+    /********************************       Apply transformation       **************************************/
+    // Convert to float data
+    float *trans_matrix_f_device; //matrix size is (4,4)
+    check_return_status(cudaMalloc((void**)&trans_matrix_f_device, 4 * 4 * sizeof(float)));
+    cast_double_to_float<<<1,1>>>(trans_matrix_device, trans_matrix_f_device, 16);
+
+    // Matrix multiplication
+    const float alf = 1;
+    const float bet = 0;
+    int m = 4, k = 4, n = num_data_pts;
+    int lda=m,ldb=n,ldc=m;
+    check_return_status(cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_T, m, n, k, &alf, trans_matrix_f_device, lda, src_4d_device, ldb, &bet, src_4d_t_device, ldc));
+
+    /*******************************      Transpose the matrix       *****************************************/
+    m = num_data_pts; n = 4;
+    lda=n,ldb=n,ldc=m;
+    check_return_status(cublasSgeam(handle, CUBLAS_OP_T, CUBLAS_OP_T, m, n,
+        &alf, src_4d_t_device, lda,
+        &bet, src_4d_t_device, ldb,
+        src_4d_device, ldc));
+
+
+    
+    check_return_status(cudaFree(trans_matrix_device));
+    check_return_status(cudaFree(trans_matrix_f_device));
+    
+}
+
 __host__ double apply_optimal_transform_cuda(const Eigen::MatrixXf &dst,  const Eigen::MatrixXf &src, Eigen::MatrixXf &src_transformed, const NEIGHBOR &neighbor){
 
     assert(src_transformed.cols() == 4 && src_transformed.rows() == src.rows());
@@ -389,44 +441,14 @@ __host__ double apply_optimal_transform_cuda(const Eigen::MatrixXf &dst,  const 
     check_return_status(cudaMemcpy(src_4d_device, src_device, 3 * num_data_pts * sizeof(float), cudaMemcpyDeviceToDevice));
     check_return_status(cudaMemcpy(src_4d_device + 3 * num_data_pts, 
                                    ones_device, num_data_pts * sizeof(float), cudaMemcpyDeviceToDevice));
-
-    point_array_chorder<<<GRID_SIZE, BLOCK_SIZE>>>(dst_device, dst_chorder_device, neighbor_device, num_data_pts);
     
     
+    apply_optimal_transform_cuda_warper(handle, solver_handle, dst_device, src_device, neighbor_device, ones_device, num_data_pts, //const input
+        dst_chorder_device, dst_chorder_zm_device, src_zm_device, sum_device_dst, sum_device_src, // temp cache only
+        src_4d_t_device, src_4d_device // results we care
+    );
     
-    
-    
-    
-    /******************************   Calculate Transformation with SVD    ************************************/
-    zero_center_points(handle, dst_chorder_device, ones_device, num_data_pts, dst_chorder_zm_device, sum_device_dst);
-    zero_center_points(handle, src_device, ones_device, num_data_pts, src_zm_device, sum_device_src);
-    
-    double *trans_matrix_device; //matrix size is (4,4)
-    check_return_status(cudaMalloc((void**)&trans_matrix_device, 4 * 4 * sizeof(double)));
-    
-    best_trasnform_SVD(handle, solver_handle, src_zm_device, dst_chorder_zm_device, sum_device_src, sum_device_dst, num_data_pts, trans_matrix_device);
-    
-    float *trans_matrix_f_device; //matrix size is (4,4)
-    check_return_status(cudaMalloc((void**)&trans_matrix_f_device, 4 * 4 * sizeof(float)));
-    cast_double_to_float<<<1,1>>>(trans_matrix_device, trans_matrix_f_device, 16);
-
-    // Do the actual multiplication 
-    // op ( A ) m × k , op ( B ) k × n and C m × n ,
-    // cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, m, n, k, alpha, A, lda, B, ldb, beta, C, ldc);
-    const float alf = 1;
-    const float bet = 0;
-    int m = 4, k = 4, n = num_data_pts;
-    int lda=m,ldb=n,ldc=m;
-    check_return_status(cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_T, m, n, k, &alf, trans_matrix_f_device, lda, src_4d_device, ldb, &bet, src_4d_t_device, ldc));
-
-
-    m = num_data_pts; n = 4;
-    lda=n,ldb=n,ldc=m;
-    check_return_status(cublasSgeam(handle, CUBLAS_OP_T, CUBLAS_OP_T, m, n,
-        &alf, src_4d_t_device, lda,
-        &bet, src_4d_t_device, ldb,
-        src_4d_device, ldc));
-    
+    /**********************************  Final cleanup steps     ********************************************/
     // Destroy the handle
     cublasDestroy(handle);
     cusolverDnDestroy(solver_handle);
@@ -438,7 +460,7 @@ __host__ double apply_optimal_transform_cuda(const Eigen::MatrixXf &dst,  const 
     
 
     // Free all variables
-    check_return_status(cudaFree(trans_matrix_device));
+    
     check_return_status(cudaFree(dst_device));
     check_return_status(cudaFree(src_device));
     check_return_status(cudaFree(dst_chorder_device));
@@ -446,7 +468,7 @@ __host__ double apply_optimal_transform_cuda(const Eigen::MatrixXf &dst,  const 
     check_return_status(cudaFree(dst_chorder_zm_device));
     check_return_status(cudaFree(src_zm_device));
     check_return_status(cudaFree(ones_device));
-    check_return_status(cudaFree(trans_matrix_f_device));
+    
     
 
     return 0;
