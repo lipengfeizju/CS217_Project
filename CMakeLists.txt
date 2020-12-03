@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.15)
 project(icp  LANGUAGES CXX CUDA)
 
 set(CMAKE_CXX_STANDARD 14)
-SET(CMAKE_BUILD_TYPE "Debug")
+#SET(CMAKE_BUILD_TYPE "Debug")
 
 include_directories(.)
 
