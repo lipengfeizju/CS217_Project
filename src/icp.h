@@ -30,7 +30,7 @@ NEIGHBOR nearest_neighbor(const Eigen::MatrixXd &src, const Eigen::MatrixXd &dst
 float dist(const Eigen::Vector3d &pta, const Eigen::Vector3d &ptb);
 
 // CUDA speedup method
-NEIGHBOR nearest_neighbor_cuda(const Eigen::MatrixXd &src, const Eigen::MatrixXd &dst);
+NEIGHBOR nearest_neighbor_cuda(const Eigen::MatrixXf &src, const Eigen::MatrixXf &dst);
 
 double apply_optimal_transform_cuda(const Eigen::MatrixXf &dst,  const Eigen::MatrixXf &src, Eigen::MatrixXf &src_transformed, const NEIGHBOR &neighbor);
 double single_step_ICP(const Eigen::MatrixXf &dst,  const Eigen::MatrixXf &src, const NEIGHBOR &neighbor, Eigen::MatrixXf &src_transformed, NEIGHBOR &neighbor_out);

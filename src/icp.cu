@@ -19,15 +19,15 @@
 #include "support.cu"
 
 // Calculate distance in GPU
-__device__ double dist_GPU(double x1, double y1, double z1, 
-                         double x2, double y2, double z2){
+__device__ double dist_GPU(float x1, float y1, float z1, 
+                         float x2, float y2, float z2){
     //dist = sqrt(pow(point1[0] - point2[0], 2) + pow(point1[1] - point2[1], 2) + pow(point1[2] - point2[2], 2));
     return sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2));
 }
 // Kernal function to find the nearest neighbor 
-__global__ void nearest_neighbor_kernel(const double * src, const double * dst, int src_count, int dst_count, int *best_neighbor, double *best_dist){
+__global__ void nearest_neighbor_kernel(const float * src, const float * dst, int src_count, int dst_count, int *best_neighbor, double *best_dist){
     // Dynamic reserve shared mem
-    extern __shared__ double shared_mem[]; 
+    extern __shared__ float shared_mem[]; 
 
     int num_dst_pts_per_thread = (dst_count - 1)/(gridDim.x * blockDim.x) + 1;
     int num_src_pts_per_thread = (src_count - 1)/(gridDim.x * blockDim.x) + 1;
@@ -35,11 +35,7 @@ __global__ void nearest_neighbor_kernel(const double * src, const double * dst, 
     int num_dst_pts_per_block = num_dst_pts_per_thread * blockDim.x;
     int num_src_pts_per_block = num_src_pts_per_thread * blockDim.x;
 
-    double *shared_points = (double *)shared_mem;                // num_dst_pts_per_thread * blockDim.x * 3
-    // num_src_pts_per_thread * blockDim.x
-    // double *min_dis       = (double *)(shared_mem + num_dst_pts_per_thread * blockDim.x * 3 * sizeof(double)); 
-    // num_src_pts_per_thread * blockDim.x
-    // int    *min_ind       = (int *)(min_dis + num_src_pts_per_thread * blockDim.x * sizeof(double));           
+    float *shared_points = (float *)shared_mem;                // num_dst_pts_per_thread * blockDim.x * 3         
     
 
     int current_index_dst = 0, current_index_src = 0, current_index_shared = 0;
@@ -76,8 +72,8 @@ __global__ void nearest_neighbor_kernel(const double * src, const double * dst, 
        }
 
        __syncthreads();
-       double x1, y1, z1;
-       double x2, y2, z2;
+       float x1, y1, z1;
+       float x2, y2, z2;
        double dist;
        //Step 2: find closest point from src to dst shared
        for(int j = 0; j < num_src_pts_per_thread; j++){
@@ -108,18 +104,18 @@ __global__ void nearest_neighbor_kernel(const double * src, const double * dst, 
     
 }
 
-__host__ void nearest_neighbor_cuda_warper(const double *src_device, const double *dst_device, int row_src, int row_dst, double *best_dist_device, int *best_neighbor_device){
+__host__ void nearest_neighbor_cuda_warper(const float *src_device, const float *dst_device, int row_src, int row_dst, double *best_dist_device, int *best_neighbor_device){
 
     int num_dst_pts_per_thread = (row_dst - 1)/(GRID_SIZE * BLOCK_SIZE) + 1;
     
-    int dyn_size_1 = num_dst_pts_per_thread * BLOCK_SIZE * 3 * sizeof(double);  // memory reserved for shared_points
+    int dyn_size_1 = num_dst_pts_per_thread * BLOCK_SIZE * 3 * sizeof(float);  // memory reserved for shared_points
 
     nearest_neighbor_kernel<<<GRID_SIZE, BLOCK_SIZE, (dyn_size_1) >>>(src_device, dst_device, row_src, row_dst, best_neighbor_device, best_dist_device);
 
 }
 
 // Host function to prepare data
-__host__ NEIGHBOR nearest_neighbor_cuda(const Eigen::MatrixXd &src, const Eigen::MatrixXd &dst){
+__host__ NEIGHBOR nearest_neighbor_cuda(const Eigen::MatrixXf &src, const Eigen::MatrixXf &dst){
     /*
     src : src point cloud matrix with size (num_point, 3)
     dst : dst point cloud matrix with size (num_point, 3)
@@ -133,23 +129,23 @@ __host__ NEIGHBOR nearest_neighbor_cuda(const Eigen::MatrixXd &src, const Eigen:
     assert(row_src == row_src);
     
     //Initialize Host variables
-    const double *src_host = src.data();
-    const double *dst_host = dst.data();
+    const float *src_host = src.data();
+    const float *dst_host = dst.data();
     int *best_neighbor_host = (int *)malloc(row_src*sizeof(int)); 
     double *best_dist_host  = (double *)malloc(row_src*sizeof(double));
 
     // Initialize Device variables
-    double *src_device, *dst_device;
+    float *src_device, *dst_device;
     int *best_neighbor_device;
     double *best_dist_device;
 
-    check_return_status(cudaMalloc((void**)&src_device, 3 * row_src * sizeof(double)));
-    check_return_status(cudaMalloc((void**)&dst_device, 3 * row_dst * sizeof(double)));
+    check_return_status(cudaMalloc((void**)&src_device, 3 * row_src * sizeof(float)));
+    check_return_status(cudaMalloc((void**)&dst_device, 3 * row_dst * sizeof(float)));
     check_return_status(cudaMalloc((void**)&best_neighbor_device, row_src * sizeof(int)));
     check_return_status(cudaMalloc((void**)&best_dist_device, row_src * sizeof(double)));
 
-    check_return_status(cudaMemcpy(src_device, src_host, 3 * row_src * sizeof(double), cudaMemcpyHostToDevice));
-    check_return_status(cudaMemcpy(dst_device, dst_host, 3 * row_dst * sizeof(double), cudaMemcpyHostToDevice));
+    check_return_status(cudaMemcpy(src_device, src_host, 3 * row_src * sizeof(float), cudaMemcpyHostToDevice));
+    check_return_status(cudaMemcpy(dst_device, dst_host, 3 * row_dst * sizeof(float), cudaMemcpyHostToDevice));
 
     nearest_neighbor_cuda_warper(src_device, dst_device, row_src, row_dst, best_dist_device, best_neighbor_device);
     
