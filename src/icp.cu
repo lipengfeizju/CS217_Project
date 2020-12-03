@@ -543,6 +543,140 @@ __host__ double single_step_ICP(const Eigen::MatrixXf &dst,  const Eigen::Matrix
     
     double mean_error = 0;
     check_return_status(cublasDasum(handle, num_data_pts, best_dist_device, 1, &mean_error));
+
+    neighbor_out.distances.clear(); 
+    neighbor_out.indices.clear();
+    for(int i = 0; i < num_data_pts; i++){
+        neighbor_out.distances.push_back(best_dist_host[i]);
+        neighbor_out.indices.push_back(best_neighbor_host[i]);
+    }
+
+    
+    /**********************************  Final cleanup steps     ********************************************/
+    // Destroy the handle
+    cublasDestroy(handle);
+    cusolverDnDestroy(solver_handle);
+
+    // Final result copy back
+    check_return_status(cudaMemcpy(gpu_temp_res, src_4d_device, 4 * num_data_pts * sizeof(float), cudaMemcpyDeviceToHost));
+    // check_return_status(cudaMemcpy(gpu_temp_res, trans_matrix_device, 4 * 4 * sizeof(double), cudaMemcpyDeviceToHost));
+
+    
+
+    // Free all variables
+    
+    check_return_status(cudaFree(dst_device));
+    check_return_status(cudaFree(src_device));
+    check_return_status(cudaFree(dst_chorder_device));
+    check_return_status(cudaFree(neighbor_device));
+    check_return_status(cudaFree(dst_chorder_zm_device));
+    check_return_status(cudaFree(src_zm_device));
+    check_return_status(cudaFree(ones_device));
+    
+    return mean_error/num_data_pts;
+}
+
+__host__ double icp_cuda(const Eigen::MatrixXf &dst,  const Eigen::MatrixXf &src, Eigen::MatrixXf &src_transformed, NEIGHBOR &neighbor_out){
+    assert(src_transformed.cols() == 4 && src_transformed.rows() == src.rows());
+    assert(src.rows() == dst.rows());// && dst.rows() == dst_chorder.rows());
+    assert(src.cols() == dst.cols());// && dst.cols() == dst_chorder.cols());
+    assert(dst.cols() == 3);
+    //assert(dst.rows() == neighbor.indices.size());
+
+    // Host variables declaration
+    int num_data_pts = dst.rows();
+    const float *dst_host         = dst.data();
+    const float *src_host         = src.data();
+    float *gpu_temp_res          = src_transformed.data();
+    int *best_neighbor_host = (int *)malloc(num_data_pts*sizeof(int)); 
+    double *best_dist_host  = (double *)malloc(num_data_pts*sizeof(double));
+
+    // Device variables declaration
+    float *dst_chorder_device, *dst_device, *src_device, *src_4d_device;
+    float *src_4d_t_device; // temp result
+    float *dst_chorder_zm_device, *src_zm_device;
+    int *neighbor_device;
+
+    //int *best_neighbor_device;
+    double *best_dist_device;
+
+    // CUBLAS and CUSOLVER initialization
+    // Create a handle for CUBLAS
+    cublasHandle_t handle;
+    cublasCreate(&handle);
+
+    // CUDA solver initialization
+    cusolverDnHandle_t solver_handle;
+    cusolverDnCreate(&solver_handle);
+
+    float *ones_host = (float *)malloc(num_data_pts*sizeof(float));
+    for(int i = 0; i< num_data_pts; i++){
+        ones_host[i] = 1;}
+    float *average_host = (float *)malloc(3*sizeof(float));
+    float *ones_device, *sum_device_src, *sum_device_dst;
+    
+    /*************************       CUDA memory operations          ********************************/
+    // Initialize the CUDA memory
+    check_return_status(cudaMalloc((void**)&dst_device         , 3 * num_data_pts * sizeof(float)));
+    check_return_status(cudaMalloc((void**)&dst_chorder_device , 3 * num_data_pts * sizeof(float)));
+    check_return_status(cudaMalloc((void**)&src_device         , 3 * num_data_pts * sizeof(float)));
+    check_return_status(cudaMalloc((void**)&src_4d_device      , 4 * num_data_pts * sizeof(float)));
+    check_return_status(cudaMalloc((void**)&src_4d_t_device, 4 * num_data_pts * sizeof(float)));
+
+    check_return_status(cudaMalloc((void**)&neighbor_device   , num_data_pts * sizeof(int)));
+    check_return_status(cudaMalloc((void**)&dst_chorder_zm_device, 3 * num_data_pts * sizeof(float)));
+    check_return_status(cudaMalloc((void**)&src_zm_device, 3 * num_data_pts * sizeof(float)));
+
+    check_return_status(cudaMalloc((void**)&ones_device, num_data_pts * sizeof(float)));
+    check_return_status(cudaMalloc((void**)&sum_device_src, 3 * sizeof(float)));
+    check_return_status(cudaMalloc((void**)&sum_device_dst, 3 * sizeof(float)));
+    
+    //check_return_status(cudaMalloc((void**)&best_neighbor_device, num_data_pts * sizeof(int)));
+    check_return_status(cudaMalloc((void**)&best_dist_device, num_data_pts * sizeof(double)));
+
+    // Copy data from host to device
+    check_return_status(cudaMemcpy(dst_device, dst_host, 3 * num_data_pts * sizeof(float), cudaMemcpyHostToDevice));
+    check_return_status(cudaMemcpy(src_device, src_host, 3 * num_data_pts * sizeof(float), cudaMemcpyHostToDevice));
+    //check_return_status(cudaMemcpy(neighbor_device, &(neighbor.indices[0]),  num_data_pts * sizeof(int), cudaMemcpyHostToDevice));
+    
+    check_return_status(cublasSetVector(num_data_pts, sizeof(float), ones_host, 1, ones_device, 1));
+    check_return_status(cudaMemcpy(src_4d_device, src_device, 3 * num_data_pts * sizeof(float), cudaMemcpyDeviceToDevice));
+    check_return_status(cudaMemcpy(src_4d_device + 3 * num_data_pts, 
+                                   ones_device, num_data_pts * sizeof(float), cudaMemcpyDeviceToDevice));
+    
+    /*******************************    Actual work done here                   ********************************/
+    double prev_error = 0;
+    double mean_error = 0;
+
+    _nearest_neighbor_cuda_warper(src_4d_device, dst_device, num_data_pts, num_data_pts, best_dist_device, neighbor_device);
+    check_return_status(cublasDasum(handle, num_data_pts, best_dist_device, 1, &prev_error));
+    prev_error /= num_data_pts;
+
+    double tolerance = 1e-6;
+    
+    for(int i = 0; i <30; i++){
+        _apply_optimal_transform_cuda_warper(handle, solver_handle, dst_device, src_device, neighbor_device, ones_device, num_data_pts, //const input
+            dst_chorder_device, dst_chorder_zm_device, src_zm_device, sum_device_dst, sum_device_src, // temp cache only
+            src_4d_t_device, src_4d_device // results we care
+        );
+        //src_4d_device stored in col major, shape is (num_pts, 3)
+        _nearest_neighbor_cuda_warper(src_4d_device, dst_device, num_data_pts, num_data_pts, best_dist_device, neighbor_device);
+        check_return_status(cudaMemcpy(best_neighbor_host, neighbor_device, num_data_pts * sizeof(int), cudaMemcpyDeviceToHost));
+        check_return_status(cudaMemcpy(best_dist_host    , best_dist_device    , num_data_pts * sizeof(double), cudaMemcpyDeviceToHost));
+        
+        check_return_status(cudaMemcpy(src_device, src_4d_device, 3* num_data_pts * sizeof(float), cudaMemcpyDeviceToDevice));
+        
+        check_return_status(cublasDasum(handle, num_data_pts, best_dist_device, 1, &mean_error));
+        mean_error /= num_data_pts;
+        std::cout << mean_error  << std::endl;
+        if (abs(prev_error - mean_error) < tolerance){
+            break;
+        }
+        // Calculate mean error and compare with previous error
+        
+        prev_error = mean_error;
+    }
+    
     
     neighbor_out.distances.clear(); 
     neighbor_out.indices.clear();
