@@ -576,7 +576,7 @@ __host__ double single_step_ICP(const Eigen::MatrixXf &dst,  const Eigen::Matrix
     return mean_error/num_data_pts;
 }
 
-__host__ double icp_cuda(const Eigen::MatrixXf &dst,  const Eigen::MatrixXf &src, Eigen::MatrixXf &src_transformed, NEIGHBOR &neighbor_out){
+__host__ int icp_cuda(const Eigen::MatrixXf &dst,  const Eigen::MatrixXf &src, int max_iterations, float tolerance, Eigen::MatrixXf &src_transformed, NEIGHBOR &neighbor_out){
     assert(src_transformed.cols() == 4 && src_transformed.rows() == src.rows());
     assert(src.rows() == dst.rows());// && dst.rows() == dst_chorder.rows());
     assert(src.cols() == dst.cols());// && dst.cols() == dst_chorder.cols());
@@ -652,9 +652,9 @@ __host__ double icp_cuda(const Eigen::MatrixXf &dst,  const Eigen::MatrixXf &src
     check_return_status(cublasDasum(handle, num_data_pts, best_dist_device, 1, &prev_error));
     prev_error /= num_data_pts;
 
-    double tolerance = 1e-6;
-    
-    for(int i = 0; i <30; i++){
+    //float tolerance = 1e-6;
+    int iter = 0;
+    for(int i = 0; i <max_iterations; i++){
         _apply_optimal_transform_cuda_warper(handle, solver_handle, dst_device, src_device, neighbor_device, ones_device, num_data_pts, //const input
             dst_chorder_device, dst_chorder_zm_device, src_zm_device, sum_device_dst, sum_device_src, // temp cache only
             src_4d_t_device, src_4d_device // results we care
@@ -675,6 +675,7 @@ __host__ double icp_cuda(const Eigen::MatrixXf &dst,  const Eigen::MatrixXf &src
         // Calculate mean error and compare with previous error
         
         prev_error = mean_error;
+        iter = i + 2;
     }
     
     
@@ -707,5 +708,5 @@ __host__ double icp_cuda(const Eigen::MatrixXf &dst,  const Eigen::MatrixXf &src
     check_return_status(cudaFree(src_zm_device));
     check_return_status(cudaFree(ones_device));
     
-    return mean_error/num_data_pts;
+    return iter;
 }

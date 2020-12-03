@@ -34,6 +34,6 @@ NEIGHBOR nearest_neighbor_cuda(const Eigen::MatrixXf &src, const Eigen::MatrixXf
 
 double apply_optimal_transform_cuda(const Eigen::MatrixXf &dst,  const Eigen::MatrixXf &src, Eigen::MatrixXf &src_transformed, const NEIGHBOR &neighbor);
 double single_step_ICP(const Eigen::MatrixXf &dst,  const Eigen::MatrixXf &src, const NEIGHBOR &neighbor, Eigen::MatrixXf &src_transformed, NEIGHBOR &neighbor_out);
-double icp_cuda(const Eigen::MatrixXf &dst,  const Eigen::MatrixXf &src, Eigen::MatrixXf &src_transformed, NEIGHBOR &neighbor_out);
+int icp_cuda(const Eigen::MatrixXf &dst,  const Eigen::MatrixXf &src, int max_iterations, float tolerance, Eigen::MatrixXf &src_transformed, NEIGHBOR &neighbor_out);
 //double ICP_single_step_cuda(const Eigen::MatrixXd &dst, const Eigen::MatrixXd &dst_chorder );
 #endif

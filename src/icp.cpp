@@ -74,7 +74,7 @@ ICP_OUT icp(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B, int max_iteratio
     int iter = 0;
 
 #ifdef USE_GPU
-    double mean_error = icp_cuda(dst.transpose(),  src3df.transpose(), src_next, neighbor);
+    iter = icp_cuda(dst.transpose(),  src3df.transpose(), max_iterations, tolerance, src_next, neighbor);
     src(Eigen::all, Eigen::all) = src_next.transpose();
     src3d(Eigen::all, Eigen::all) = src(Eigen::seqN(0,3), Eigen::all).cast<double>();
 #else
