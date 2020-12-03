@@ -92,7 +92,7 @@ ICP_OUT icp(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B, int max_iteratio
     for (int i=0; i<max_iterations; i++){
 
 #ifdef USE_GPU
-        single_step_ICP(dst.transpose(),  src3d.transpose(), neighbor, src_next, neighbor_next);
+        mean_error = single_step_ICP(dst.transpose(),  src3d.transpose(), neighbor, src_next, neighbor_next);
         src(Eigen::all, Eigen::all) = src_next.transpose();
         src3d(Eigen::all, Eigen::all) = src(Eigen::seqN(0,3), Eigen::all);
         neighbor = neighbor_next;
@@ -137,12 +137,10 @@ ICP_OUT icp(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B, int max_iteratio
 
         src3d(Eigen::all, Eigen::all) = src(Eigen::seqN(0,3), Eigen::all);
         neighbor = nearest_neighbor(src3d.transpose(), dst.transpose());
-#endif
-        
         mean_error = std::accumulate(neighbor.distances.begin(),neighbor.distances.end(),0.0)/neighbor.distances.size();
-
-
-        std::cout << mean_error << std::endl;
+#endif
+    
+        std::cout << mean_error  << std::endl;
         if (abs(prev_error - mean_error) < tolerance){
             break;
         }

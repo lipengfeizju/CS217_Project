@@ -541,6 +541,9 @@ __host__ double single_step_ICP(const Eigen::MatrixXf &dst,  const Eigen::Matrix
     check_return_status(cudaMemcpy(best_neighbor_host, best_neighbor_device, num_data_pts * sizeof(int), cudaMemcpyDeviceToHost));
     check_return_status(cudaMemcpy(best_dist_host    , best_dist_device    , num_data_pts * sizeof(double), cudaMemcpyDeviceToHost));
     
+    double mean_error = 0;
+    check_return_status(cublasDasum(handle, num_data_pts, best_dist_device, 1, &mean_error));
+    
     neighbor_out.distances.clear(); 
     neighbor_out.indices.clear();
     for(int i = 0; i < num_data_pts; i++){
@@ -548,6 +551,7 @@ __host__ double single_step_ICP(const Eigen::MatrixXf &dst,  const Eigen::Matrix
         neighbor_out.indices.push_back(best_neighbor_host[i]);
     }
 
+    
     /**********************************  Final cleanup steps     ********************************************/
     // Destroy the handle
     cublasDestroy(handle);
@@ -569,5 +573,5 @@ __host__ double single_step_ICP(const Eigen::MatrixXf &dst,  const Eigen::Matrix
     check_return_status(cudaFree(src_zm_device));
     check_return_status(cudaFree(ones_device));
     
-    return 0;
+    return mean_error/num_data_pts;
 }
