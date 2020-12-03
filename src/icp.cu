@@ -1,5 +1,6 @@
-// Copyright: Pengfei Li
+// Code Credit: Pengfei Li
 // Email: pli081@ucr.edu
+// All rights reserved
 
 #include <iostream>
 #include <numeric>
@@ -17,12 +18,13 @@
 
 #include "support.cu"
 
+// Calculate distance in GPU
 __device__ double dist_GPU(double x1, double y1, double z1, 
                          double x2, double y2, double z2){
     //dist = sqrt(pow(point1[0] - point2[0], 2) + pow(point1[1] - point2[1], 2) + pow(point1[2] - point2[2], 2));
     return sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2));
 }
-
+// Kernal function to find the nearest neighbor 
 __global__ void nearest_neighbor_kernel(const double * src, const double * dst, int src_count, int dst_count, int *best_neighbor, double *best_dist){
     // Dynamic reserve shared mem
     extern __shared__ double shared_mem[]; 
@@ -105,7 +107,7 @@ __global__ void nearest_neighbor_kernel(const double * src, const double * dst, 
    }
     
 }
-
+// Host function to prepare data
 __host__ NEIGHBOR nearest_neighbor_cuda(const Eigen::MatrixXd &src, const Eigen::MatrixXd &dst){
     /*
     src : src point cloud matrix with size (num_point, 3)
@@ -181,23 +183,6 @@ __global__ void point_array_chorder(const float *src, float *src_chorder, const 
             src_chorder[current_index + num_points  ]  =  src[target_index + num_points  ];     //y
             src_chorder[current_index + num_points*2]  =  src[target_index + num_points*2];     //z
         }
-    }
-}
-__global__ void cast_float_to_double(const float *src, double *dst, int num_points){
-    int num_point_per_thread = (num_points - 1)/(gridDim.x * blockDim.x) + 1;
-    int current_index = 0;
-    for(int j = 0; j < num_point_per_thread; j++){
-        current_index =  blockIdx.x * blockDim.x * num_point_per_thread + j * blockDim.x + threadIdx.x;
-        if (current_index < num_points) dst[current_index] = (double)src[current_index];
-    }
-}
-
-__global__ void cast_double_to_float(const double *src, float *dst, int num_points){
-    int num_point_per_thread = (num_points - 1)/(gridDim.x * blockDim.x) + 1;
-    int current_index = 0;
-    for(int j = 0; j < num_point_per_thread; j++){
-        current_index =  blockIdx.x * blockDim.x * num_point_per_thread + j * blockDim.x + threadIdx.x;
-        if (current_index < num_points) dst[current_index] = (float)src[current_index];
     }
 }
 
@@ -378,7 +363,7 @@ __host__ double apply_optimal_transform_cuda(const Eigen::MatrixXf &dst,  const 
     float *average_host = (float *)malloc(3*sizeof(float));
     float *ones_device, *sum_device_src, *sum_device_dst;
     
-    
+    /*************************       CUDA memory operations          ********************************/
     // Initialize the CUDA memory
     check_return_status(cudaMalloc((void**)&dst_device         , 3 * num_data_pts * sizeof(float)));
     check_return_status(cudaMalloc((void**)&dst_chorder_device , 3 * num_data_pts * sizeof(float)));
@@ -412,11 +397,10 @@ __host__ double apply_optimal_transform_cuda(const Eigen::MatrixXf &dst,  const 
     
     
     
-    /******************************   zero center src and dst_chorder point array    ************************************/
+    /******************************   Calculate Transformation with SVD    ************************************/
     zero_center_points(handle, dst_chorder_device, ones_device, num_data_pts, dst_chorder_zm_device, sum_device_dst);
     zero_center_points(handle, src_device, ones_device, num_data_pts, src_zm_device, sum_device_src);
     
-    /******************************    calculate best transformation for the data    ************************************/
     double *trans_matrix_device; //matrix size is (4,4)
     check_return_status(cudaMalloc((void**)&trans_matrix_device, 4 * 4 * sizeof(double)));
     

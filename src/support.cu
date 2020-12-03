@@ -1,9 +1,48 @@
-// Copyright: Pengfei Li
+// Code Credit: Pengfei Li
 // Email: pli081@ucr.edu
+
 #include <iostream>
 #include <string>
 #include <cublas_v2.h>
 #include <cusolverDn.h>
+
+__global__ void print_matrix_device(const float *A, int nr_rows_A, int nr_cols_A) {
+ 
+    for(int i = 0; i < nr_rows_A; ++i){
+        for(int j = 0; j < nr_cols_A; ++j){
+           printf("%f ", A[j * nr_rows_A + i]) ;
+        }
+        printf("\n");
+   }
+   printf("\n");
+}
+__host__ void print_matrix_host(const float *A, int nr_rows_A, int nr_cols_A) {
+
+   for(int i = 0; i < nr_rows_A; ++i){
+       for(int j = 0; j < nr_cols_A; ++j){
+          printf("%f ", A[j * nr_rows_A + i]) ;
+       }
+       printf("\n");
+  }
+  printf("\n");
+}
+
+__global__ void cast_float_to_double(const float *src, double *dst, int num_points){
+    int num_point_per_thread = (num_points - 1)/(gridDim.x * blockDim.x) + 1;
+    int current_index = 0;
+    for(int j = 0; j < num_point_per_thread; j++){
+        current_index =  blockIdx.x * blockDim.x * num_point_per_thread + j * blockDim.x + threadIdx.x;
+        if (current_index < num_points) dst[current_index] = (double)src[current_index];
+    }
+}
+__global__ void cast_double_to_float(const double *src, float *dst, int num_points){
+    int num_point_per_thread = (num_points - 1)/(gridDim.x * blockDim.x) + 1;
+    int current_index = 0;
+    for(int j = 0; j < num_point_per_thread; j++){
+        current_index =  blockIdx.x * blockDim.x * num_point_per_thread + j * blockDim.x + threadIdx.x;
+        if (current_index < num_points) dst[current_index] = (float)src[current_index];
+    }
+}
 
 void check_return_status(cudaError_t cuda_ret){
     if(cuda_ret != cudaSuccess){
@@ -63,23 +102,3 @@ void check_return_status(cusolverStatus_t error)
     
 }
 
-__global__ void print_matrix_device(const float *A, int nr_rows_A, int nr_cols_A) {
- 
-    for(int i = 0; i < nr_rows_A; ++i){
-        for(int j = 0; j < nr_cols_A; ++j){
-           printf("%f ", A[j * nr_rows_A + i]) ;
-        }
-        printf("\n");
-   }
-   printf("\n");
-}
-__host__ void print_matrix_host(const float *A, int nr_rows_A, int nr_cols_A) {
-
-   for(int i = 0; i < nr_rows_A; ++i){
-       for(int j = 0; j < nr_cols_A; ++j){
-          printf("%f ", A[j * nr_rows_A + i]) ;
-       }
-       printf("\n");
-  }
-  printf("\n");
-}
