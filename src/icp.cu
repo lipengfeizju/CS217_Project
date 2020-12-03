@@ -104,7 +104,7 @@ __global__ void nearest_neighbor_kernel(const float * src, const float * dst, in
     
 }
 
-__host__ void nearest_neighbor_cuda_warper(const float *src_device, const float *dst_device, int row_src, int row_dst, double *best_dist_device, int *best_neighbor_device){
+__host__ void _nearest_neighbor_cuda_warper(const float *src_device, const float *dst_device, int row_src, int row_dst, double *best_dist_device, int *best_neighbor_device){
 
     int num_dst_pts_per_thread = (row_dst - 1)/(GRID_SIZE * BLOCK_SIZE) + 1;
     
@@ -147,7 +147,7 @@ __host__ NEIGHBOR nearest_neighbor_cuda(const Eigen::MatrixXf &src, const Eigen:
     check_return_status(cudaMemcpy(src_device, src_host, 3 * row_src * sizeof(float), cudaMemcpyHostToDevice));
     check_return_status(cudaMemcpy(dst_device, dst_host, 3 * row_dst * sizeof(float), cudaMemcpyHostToDevice));
 
-    nearest_neighbor_cuda_warper(src_device, dst_device, row_src, row_dst, best_dist_device, best_neighbor_device);
+    _nearest_neighbor_cuda_warper(src_device, dst_device, row_src, row_dst, best_dist_device, best_neighbor_device);
     
     check_return_status(cudaMemcpy(best_neighbor_host, best_neighbor_device, row_src * sizeof(int), cudaMemcpyDeviceToHost));
     check_return_status(cudaMemcpy(best_dist_host    , best_dist_device    , row_src * sizeof(double), cudaMemcpyDeviceToHost));
@@ -324,7 +324,7 @@ __host__ void zero_center_points(cublasHandle_t handle, const float *point_array
 
 }
 
-__host__ void apply_optimal_transform_cuda_warper(cublasHandle_t handle, cusolverDnHandle_t solver_handle, const float *dst_device, const float *src_device, const int *neighbor_device, const float *ones_device, int num_data_pts,
+__host__ void _apply_optimal_transform_cuda_warper(cublasHandle_t handle, cusolverDnHandle_t solver_handle, const float *dst_device, const float *src_device, const int *neighbor_device, const float *ones_device, int num_data_pts,
         float *dst_chorder_device, float *dst_chorder_zm_device, float *src_zm_device, float *sum_device_dst, float *sum_device_src,
         float *src_4d_t_device, float *src_4d_device
     ){
@@ -433,7 +433,7 @@ __host__ double apply_optimal_transform_cuda(const Eigen::MatrixXf &dst,  const 
                                    ones_device, num_data_pts * sizeof(float), cudaMemcpyDeviceToDevice));
     
     
-    apply_optimal_transform_cuda_warper(handle, solver_handle, dst_device, src_device, neighbor_device, ones_device, num_data_pts, //const input
+    _apply_optimal_transform_cuda_warper(handle, solver_handle, dst_device, src_device, neighbor_device, ones_device, num_data_pts, //const input
         dst_chorder_device, dst_chorder_zm_device, src_zm_device, sum_device_dst, sum_device_src, // temp cache only
         src_4d_t_device, src_4d_device // results we care
     );
