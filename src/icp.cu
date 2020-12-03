@@ -131,12 +131,6 @@ __host__ NEIGHBOR nearest_neighbor_cuda(const Eigen::MatrixXd &src, const Eigen:
     int row_src = src.rows();
     int row_dst = dst.rows();
     assert(row_src == row_src);
-
-    // const double * vc = dst.data();
-    // for(int j = 0; j < 10; j++)
-    //     std::cout << vc[j] << ", ";
-    // std::cout << std::endl << std::endl;
-    // std::cout << dst( Eigen::seqN(0,4), Eigen::all) << std::endl;
     
     //Initialize Host variables
     const double *src_host = src.data();
@@ -471,5 +465,8 @@ __host__ double apply_optimal_transform_cuda(const Eigen::MatrixXf &dst,  const 
     
     
 
+    return 0;
+}
+__host__ double single_step_ICP(const Eigen::MatrixXf &dst,  const Eigen::MatrixXf &src, const NEIGHBOR &neighbor, Eigen::MatrixXf &src_transformed, NEIGHBOR &neighbor_out){
     return 0;
 }

@@ -3,7 +3,7 @@
 #include "icp.h"
 #include "Eigen/Eigen"
 
-#define USE_GPU true
+#define USE_GPU
 using namespace std;
 
 void verify(NEIGHBOR neigbor1, NEIGHBOR neigbor2){
@@ -53,9 +53,11 @@ void verify(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B){
 
 ICP_OUT icp(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B, int max_iterations, float tolerance){
     int row = A.rows();
+
+    Eigen::MatrixXd src3d = A.transpose();
+    Eigen::MatrixXd dst = B.transpose();
     Eigen::MatrixXd src = Eigen::MatrixXd::Ones(3+1,row);
-    Eigen::MatrixXd src3d = Eigen::MatrixXd::Ones(3,row);
-    //Eigen::MatrixXd dst = Eigen::MatrixXd::Ones(3+1,row);
+    src(Eigen::seqN(0,3), Eigen::all) = A.transpose();
 
     NEIGHBOR neighbor;
     //NEIGHBOR neighbor_cpu;
@@ -64,20 +66,14 @@ ICP_OUT icp(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B, int max_iteratio
     ICP_OUT result;
     int iter = 0;
 
-    
-    src(Eigen::seqN(0,3), Eigen::all) = A.transpose();
-    src3d(Eigen::seqN(0,3), Eigen::all) = A.transpose();
-
-    Eigen::MatrixXd dst = B.transpose();
-
 
     double prev_error = 0;
     double mean_error = 0;
-    if(USE_GPU)
-        neighbor = nearest_neighbor_cuda(src3d.transpose(), dst.transpose());
-    else
-        neighbor = nearest_neighbor(src3d.transpose(), dst.transpose());
-
+#ifdef USE_GPU
+    neighbor = nearest_neighbor_cuda(src3d.transpose(), dst.transpose());
+#else
+    neighbor = nearest_neighbor(src3d.transpose(), dst.transpose());
+#endif
 
     prev_error = std::accumulate(neighbor.distances.begin(),neighbor.distances.end(),0.0)/neighbor.distances.size();
 
@@ -89,66 +85,60 @@ ICP_OUT icp(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B, int max_iteratio
 
     
     for (int i=0; i<max_iterations; i++){
+
+#ifdef USE_GPU
+        apply_optimal_transform_cuda(dstf.transpose(), src3df.transpose(), gpu_temp_res, neighbor);
+        src = point_temp(Eigen::all, Eigen::all) = gpu_temp_res.transpose().cast<double>();
+        src3d(Eigen::all, Eigen::all) = src(Eigen::seqN(0,3), Eigen::all);
+        neighbor = nearest_neighbor_cuda(src3d.transpose(), dst.transpose());
+#else
+        dst_chorder(Eigen::seqN(0,3), Eigen::all) = dst(Eigen::seqN(0,3), neighbor.indices);
+    
+        Eigen::Vector3d centroid_A(0,0,0);
+        Eigen::Vector3d centroid_B(0,0,0);
+        Eigen::MatrixXd A_zm = src3d.transpose(); // Zero mean version of A
+        Eigen::MatrixXd B_zm = dst_chorder.transpose(); // Zero mean version of B
+        int row = src3d.cols();
+
+        centroid_A = src3d.rowwise().sum() / row;
+        centroid_B = dst_chorder.rowwise().sum() / row;
+
+        A_zm.rowwise() -= centroid_A.transpose();
+        B_zm.rowwise() -= centroid_B.transpose();
+        Eigen::MatrixXd H = A_zm.transpose()*B_zm;
+
         
-        if(USE_GPU){
-            apply_optimal_transform_cuda(dstf.transpose(), src3df.transpose(), gpu_temp_res, neighbor);
-            src = point_temp(Eigen::all, Eigen::all) = gpu_temp_res.transpose().cast<double>();
+        Eigen::JacobiSVD<Eigen::MatrixXd> svd(H, Eigen::ComputeFullU | Eigen::ComputeFullV);
+        Eigen::MatrixXd U = svd.matrixU();
+        Eigen::VectorXd S = svd.singularValues();
+        Eigen::MatrixXd V = svd.matrixV();
+        Eigen::MatrixXd Vt = V.transpose();
+
+
+        Eigen::Matrix3d R = Vt.transpose()*U.transpose();
+
+
+        if (R.determinant() < 0 ){
+            Vt.block<1,3>(2,0) *= -1;
+            R = Vt.transpose()*U.transpose();
         }
-           
-        else{
-            dst_chorder(Eigen::seqN(0,3), Eigen::all) = dst(Eigen::seqN(0,3), neighbor.indices);
+        Eigen::MatrixXd t = centroid_B - R*centroid_A;
+
+        Eigen::Matrix4d T = Eigen::MatrixXd::Identity(4,4);
+        T.block<3,3>(0,0) = R;
+        T.block<3,1>(0,3) = t;
+        src = T*src;
+
+        // temp = cal_T_matrix_cuda(dstf.transpose(), src3df.transpose(), gpu_temp_res, neighbor);
+        // point_temp(Eigen::all, Eigen::all) = gpu_temp_res.transpose().cast<double>();
         
-            Eigen::Vector3d centroid_A(0,0,0);
-            Eigen::Vector3d centroid_B(0,0,0);
-            Eigen::MatrixXd A_zm = src3d.transpose(); // Zero mean version of A
-            Eigen::MatrixXd B_zm = dst_chorder.transpose(); // Zero mean version of B
-            int row = src3d.cols();
-
-            centroid_A = src3d.rowwise().sum() / row;
-            centroid_B = dst_chorder.rowwise().sum() / row;
-
-            A_zm.rowwise() -= centroid_A.transpose();
-            B_zm.rowwise() -= centroid_B.transpose();
-            Eigen::MatrixXd H = A_zm.transpose()*B_zm;
-
-            
-            Eigen::JacobiSVD<Eigen::MatrixXd> svd(H, Eigen::ComputeFullU | Eigen::ComputeFullV);
-            Eigen::MatrixXd U = svd.matrixU();
-            Eigen::VectorXd S = svd.singularValues();
-            Eigen::MatrixXd V = svd.matrixV();
-            Eigen::MatrixXd Vt = V.transpose();
-
-
-            Eigen::Matrix3d R = Vt.transpose()*U.transpose();
-
-
-            if (R.determinant() < 0 ){
-                Vt.block<1,3>(2,0) *= -1;
-                R = Vt.transpose()*U.transpose();
-            }
-            Eigen::MatrixXd t = centroid_B - R*centroid_A;
-
-            Eigen::Matrix4d T = Eigen::MatrixXd::Identity(4,4);
-            T.block<3,3>(0,0) = R;
-            T.block<3,1>(0,3) = t;
-            src = T*src;
-
-            // temp = cal_T_matrix_cuda(dstf.transpose(), src3df.transpose(), gpu_temp_res, neighbor);
-            // point_temp(Eigen::all, Eigen::all) = gpu_temp_res.transpose().cast<double>();
-            
-            // verify(src, point_temp);
-            // std::cout << "So far so good, keep going !\n";
-            // exit(0); 
-        }
-        
+        // verify(src, point_temp);
+        // std::cout << "So far so good, keep going !\n";
+        // exit(0); 
         // Copy first 3 rows to src3d
         src3d(Eigen::all, Eigen::all) = src(Eigen::seqN(0,3), Eigen::all);
-
-
-        if(USE_GPU)
-            neighbor = nearest_neighbor_cuda(src3d.transpose(), dst.transpose());
-        else
-            neighbor = nearest_neighbor(src3d.transpose(), dst.transpose());
+        neighbor = nearest_neighbor(src3d.transpose(), dst.transpose());
+#endif
         
         mean_error = std::accumulate(neighbor.distances.begin(),neighbor.distances.end(),0.0)/neighbor.distances.size();
 

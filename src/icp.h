@@ -33,5 +33,6 @@ float dist(const Eigen::Vector3d &pta, const Eigen::Vector3d &ptb);
 NEIGHBOR nearest_neighbor_cuda(const Eigen::MatrixXd &src, const Eigen::MatrixXd &dst);
 
 double apply_optimal_transform_cuda(const Eigen::MatrixXf &dst,  const Eigen::MatrixXf &src, Eigen::MatrixXf &src_transformed, const NEIGHBOR &neighbor);
+double single_step_ICP(const Eigen::MatrixXf &dst,  const Eigen::MatrixXf &src, const NEIGHBOR &neighbor, Eigen::MatrixXf &src_transformed, NEIGHBOR &neighbor_out);
 //double ICP_single_step_cuda(const Eigen::MatrixXd &dst, const Eigen::MatrixXd &dst_chorder );
 #endif
