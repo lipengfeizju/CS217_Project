@@ -78,7 +78,6 @@ ICP_OUT icp(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B, int max_iteratio
     prev_error = std::accumulate(neighbor.distances.begin(),neighbor.distances.end(),0.0)/neighbor.distances.size();
 
     double temp = 0;
-    Eigen::MatrixXd point_temp = Eigen::MatrixXd::Ones(4, row);  // free to change
     Eigen::MatrixXf gpu_temp_res = Eigen::MatrixXf::Ones(row, 4);// free to change
     Eigen::MatrixXf dstf = dst.cast<float>();
     Eigen::MatrixXf src3df = src3d.cast<float>();
@@ -88,7 +87,7 @@ ICP_OUT icp(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B, int max_iteratio
 
 #ifdef USE_GPU
         apply_optimal_transform_cuda(dstf.transpose(), src3df.transpose(), gpu_temp_res, neighbor);
-        src = point_temp(Eigen::all, Eigen::all) = gpu_temp_res.transpose().cast<double>();
+        src(Eigen::all, Eigen::all) = gpu_temp_res.transpose().cast<double>();
         src3d(Eigen::all, Eigen::all) = src(Eigen::seqN(0,3), Eigen::all);
         neighbor = nearest_neighbor_cuda(src3d.transpose(), dst.transpose());
 #else
@@ -128,14 +127,7 @@ ICP_OUT icp(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B, int max_iteratio
         T.block<3,3>(0,0) = R;
         T.block<3,1>(0,3) = t;
         src = T*src;
-
-        // temp = cal_T_matrix_cuda(dstf.transpose(), src3df.transpose(), gpu_temp_res, neighbor);
-        // point_temp(Eigen::all, Eigen::all) = gpu_temp_res.transpose().cast<double>();
         
-        // verify(src, point_temp);
-        // std::cout << "So far so good, keep going !\n";
-        // exit(0); 
-        // Copy first 3 rows to src3d
         src3d(Eigen::all, Eigen::all) = src(Eigen::seqN(0,3), Eigen::all);
         neighbor = nearest_neighbor(src3d.transpose(), dst.transpose());
 #endif
