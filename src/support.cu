@@ -5,6 +5,7 @@
 #include <string>
 #include <cublas_v2.h>
 #include <cusolverDn.h>
+#include <stdio.h>
 
 __global__ void print_matrix_device(const float *A, int nr_rows_A, int nr_cols_A) {
  
