@@ -3,7 +3,7 @@
 #include "icp.h"
 #include "Eigen/Eigen"
 
-#define GPU_VERSION 1
+#define GPU_VERSION 0
 using namespace std;
 
 void verify(NEIGHBOR neigbor1, NEIGHBOR neigbor2){
