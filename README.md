@@ -62,4 +62,23 @@ Then you have to tell Eclipse what binary to run and what project to compile.
 
 Then, enjoy the IDE.
 
+## 4. Nvidia Profiling
+It seems that by default, non-root user don't have permision to profile GPU. If you can't profile, please try the followings:
+
+### 4.1 Unload Old modules
+```shell
+systemctl isolate multi-user # Stop the window manager.
+sudo modprobe -r nvidia_uvm nvidia_drm nvidia
+# modprobe -r nvidia_uvm nvidia_drm nvidia_modeset nvidia-vgpu-vfio nvidia # Unload dependent modules
+```
+
+### 4.2 Allow all users to profile
+```shell
+sudo modprobe nvidia NVreg_RestrictProfilingToAdminUsers=0
+```
+
+### 4.3 Restart Windows Manager(GUI)
+```shell
+systemctl isolate graphical
+```
 

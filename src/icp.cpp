@@ -5,6 +5,7 @@
 
 #define GPU_VERSION 0
 using namespace std;
+#include <unistd.h>
 
 void verify(NEIGHBOR neigbor1, NEIGHBOR neigbor2){
     if(!(neigbor1.distances.size() == neigbor2.distances.size() && 
@@ -145,7 +146,8 @@ ICP_OUT icp(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B, int max_iteratio
     neighbor = nearest_neighbor_cuda(src3df.transpose(), dst.transpose());
     prev_error = std::accumulate(neighbor.distances.begin(),neighbor.distances.end(),0.0)/neighbor.distances.size();
     for (int i=0; i<max_iterations; i++){
-        dst_chorder(Eigen::seqN(0,3), Eigen::all) = dst(Eigen::seqN(0,3), neighbor.indices);
+        //sleep(1);
+    	dst_chorder(Eigen::seqN(0,3), Eigen::all) = dst(Eigen::seqN(0,3), neighbor.indices);
 
         Eigen::Vector3f centroid_A(0,0,0);
         Eigen::Vector3f centroid_B(0,0,0);

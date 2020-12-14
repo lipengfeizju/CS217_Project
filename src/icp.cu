@@ -9,6 +9,7 @@
 #include "Eigen/Eigen"
 #include <assert.h>
 #include <iomanip>
+#include <unistd.h>
 
 #define BLOCK_SIZE 32
 #define GRID_SIZE 128
@@ -112,6 +113,10 @@ __global__ void nearest_neighbor_kernel(const float * src, const float * dst, in
    }
     
 }
+
+// __global__ void nearest_neighbor_naive_kernel(const float * src, const float * dst, int src_count, int dst_count, int *best_neighbor, double *best_dist){
+    
+// }
 
 __global__ void point_array_chorder(const float *src, const int *indices, int num_points, float *src_chorder){
     int num_point_per_thread = (num_points - 1)/(gridDim.x * blockDim.x) + 1;
@@ -415,6 +420,7 @@ __host__ int icp_cuda(const Eigen::MatrixXf &dst,  const Eigen::MatrixXf &src, i
     //float tolerance = 1e-6;
     int iter = 0;
     for(int i = 0; i <max_iterations; i++){
+    	//sleep(1);
         _apply_optimal_transform_cuda_warper(handle, solver_handle, dst_device, src_device, neighbor_device, ones_device, num_data_pts, //const input
             dst_chorder_device, dst_chorder_zm_device, src_zm_device, sum_device_dst, sum_device_src, // temp cache only
             src_4d_t_device, src_4d_device // results we care
