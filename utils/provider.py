@@ -1,3 +1,7 @@
+'''
+    ModelNet dataset. Support ModelNet40, ModelNet10, XYZ and normal channels. Up to 10000 points.
+    Code Credit :  Charles R. Qi, Li (Eric) Yi, Hao Su, Leonidas J. Guibas
+'''
 import os
 import sys
 import numpy as np
