@@ -21,7 +21,10 @@ set_property(TARGET icp_cuda PROPERTY CUDA_ARCHITECTURES 75)
 
 # set_source_files_properties(src/main.cpp PROPERTIES LANGUAGE CUDA)  # For Debug only
 add_executable(registration_demo  src/demo.cpp)
-# set_property(TARGET registration PROPERTY CUDA_ARCHITECTURES 75)    # For Debug only
-
 target_link_libraries(registration_demo
+                    icp data_io icp_cuda -lcublas -lcusolver)
+
+
+add_executable(registration  src/registration.cpp)
+target_link_libraries(registration
                     icp data_io icp_cuda -lcublas -lcusolver)
