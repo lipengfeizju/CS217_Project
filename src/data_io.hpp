@@ -1,3 +1,8 @@
+/*
+Utility functions for data-io
+Code Credit: Pengfei Li
+Email: pli081@ucr.edu
+*/
 #include "Eigen/Eigen"
 
 #define MAXBUFSIZE  ((int) 1e6)

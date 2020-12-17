@@ -1,3 +1,8 @@
+/*
+Registration main function
+Code Credit: Pengfei Li
+Email: pli081@ucr.edu 
+*/
 #include <iostream>
 #include <vector>
 #include <numeric>
@@ -13,14 +18,6 @@ using namespace std;
 using namespace Eigen;
 
 
-
-float my_random(void);
-Matrix3d rotation_matrix(Vector3d axis, float theta);
-void test_best_fit(void);
-void test_icp(void);
-void my_random_shuffle(MatrixXd &matrix);
-
-
 unsigned GetTickCount()
 {
         struct timeval tv;
@@ -33,14 +30,6 @@ unsigned GetTickCount()
 
 int main(int argc, char *argv[]){
 
-
-    // std::random_device rd;
-    // std::mt19937 gen(rd());
-
-    // std::string base_dir = "/home/anny/cuda-workspace/icp_project/icp/data/samples/";
-    // std::cout << base_dir + argv[1] <<std::endl;
-    // MatrixXd A = load_pcl(base_dir + "airplane_0001.txt");    
-    // MatrixXd B = load_pcl(base_dir + "airplane_0001_rotated.txt");
     MatrixXd A, B;
     std::string base_dir = "";
     if (argc == 4){
@@ -110,38 +99,6 @@ float my_random(void){
     float tmp = rand()%100;
     return tmp/100;
 }
-
-void my_random_shuffle(MatrixXd &matrix){
-    int row = matrix.rows();
-    vector<Vector3d> temp;
-    for(int jj=0; jj < row; jj++){
-        temp.push_back(matrix.block<1,3>(jj,0));
-    }
-    random_shuffle(temp.begin(),temp.end());
-    for(int jj=0; jj < row; jj++){
-        matrix.block<1,3>(jj,0) = temp[jj].transpose();
-        // cout << temp[jj].transpose() << endl;
-        // cout << "row  " << row << endl;
-    }
-}
-
-
-Matrix3d rotation_matrix(Vector3d axis, float theta){
-    axis = axis / sqrt(axis.transpose()*axis);
-    float a = cos(theta/2);
-    Vector3d temp = -axis*sin(theta/2);
-    float b,c,d;
-    b = temp(0);
-    c = temp(1);
-    d = temp(2);
-    Matrix3d R;
-    R << a*a+b*b-c*c-d*d, 2*(b*c-a*d), 2*(b*d+a*c),
-        2*(b*c+a*d), a*a+c*c-b*b-d*d, 2*(c*d-a*b),
-        2*(b*d-a*c), 2*(c*d+a*b), a*a+d*d-b*b-c*c;
-
-    return R;
-}
-
 
 
 

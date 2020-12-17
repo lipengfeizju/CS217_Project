@@ -1,3 +1,6 @@
+/*
+A simple demo for ICP algorithm
+*/
 #include <iostream>
 #include <vector>
 #include <numeric>
