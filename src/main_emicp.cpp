@@ -6,7 +6,7 @@
 #include "icp.h"
 #include "data_io.hpp"
 #include <random>
-
+#include "emicp.h"
 
 
 using namespace std;
@@ -38,6 +38,7 @@ int main(int argc, char *argv[]){
     std::mt19937 gen(rd());
 
     std::string file_name = "/home/tempmaj/pli/wendy/CS217_Project/data/samples/airplane_0001.txt";
+    
     MatrixXd pcl_data = load_pcl(file_name);
     int num_point = pcl_data.rows();
 
@@ -45,8 +46,8 @@ int main(int argc, char *argv[]){
     Vector3d t;
     Matrix3d R;
     Matrix4d T;    // Transformation result from ICP
-    Vector3d t1;
-    Matrix3d R1;
+    // Vector3d t1;
+    // Matrix3d R1;
     ICP_OUT icp_result;
     std::vector<float> dist;
     int iter;
@@ -75,38 +76,46 @@ int main(int argc, char *argv[]){
     save_pcl("/home/tempmaj/pli/wendy/CS217_Project/data/samples/airplane_0001_rotated.txt",B);
 
     /******** Calculate ICP ***********/
+    // Eigen::MatrixXf src3df = A.cast<float>();
+    Eigen::MatrixXf cloud_target = A.cast<float>();
+    Eigen::MatrixXf cloud_source = B.cast<float>();
+
+    Vector3f t1;
+    Matrix3f R1;
     start = GetTickCount();
-    icp_result = icp(B, A, 50,  1e-6);
+    emicp(cloud_target, cloud_source, R1.data(), t1.data());
+    // icp_result = icp(B, A, 50,  1e-6);
+
     end = GetTickCount();
     interval = float((end - start))/1000;
     total_time += interval;
 
-    T = icp_result.trans;
-    dist = icp_result.distances;
-    iter = icp_result.iter;
-    mean = std::accumulate(dist.begin(),dist.end(),0.0)/dist.size();
+    // T = icp_result.trans;
+    // dist = icp_result.distances;
+    // iter = icp_result.iter;
+    // mean = std::accumulate(dist.begin(),dist.end(),0.0)/dist.size();
 
 
-    t1 = T.block<3,1>(0,3);
-    R1 = T.block<3,3>(0,0);
+    // t1 = T.block<3,1>(0,3);
+    // R1 = T.block<3,3>(0,0);
 
 
-    cout << "mean error is " << mean - 6*noise_sigma << endl << endl;
-    cout << "icp trans error" << endl << -t1 - t << endl << endl;
-    cout << "icp R error " << endl << R1.inverse() - R << endl << endl;
-    cout << "total iteration is " << iter << endl;
+    // cout << "mean error is " << mean - 6*noise_sigma << endl << endl;
+    // cout << "icp trans error" << endl << -t1 - t << endl << endl;
+    // cout << "icp R error " << endl << R1.inverse() - R << endl << endl;
+    // cout << "total iteration is " << iter << endl;
     
     cout << "icp time: " << total_time << endl;
 
-    /**********  Reconstruct the point cloud    *************/
+    // /**********  Reconstruct the point cloud    *************/
 
-    MatrixXd D = B;
-    D = (R1 * D.transpose()).transpose();
-    D.rowwise() += t1.transpose();
+    // MatrixXd D = B;
+    // D = (R1 * D.transpose()).transpose();
+    // D.rowwise() += t1.transpose();
 
 
-    std::cout << "Writing recovered point cloud data to file" << std::endl;
-    save_pcl("/home/tempmaj/pli/wendy/CS217_Project/data/samples/airplane_0001_recovered.txt",D);
+    // std::cout << "Writing recovered point cloud data to file" << std::endl;
+    // save_pcl("/home/tempmaj/pli/wendy/CS217_Project/data/samples/airplane_0001_recovered.txt",D);
 
     return 0;
 }

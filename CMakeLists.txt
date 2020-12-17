@@ -19,9 +19,18 @@ add_library(icp STATIC src/icp.cpp)
 add_library(icp_cuda STATIC src/icp.cu)
 set_property(TARGET icp_cuda PROPERTY CUDA_ARCHITECTURES 75)       
 
+
+add_library(emicp_cuda STATIC src/emicp.cu)
+set_property(TARGET emicp_cuda PROPERTY CUDA_ARCHITECTURES 75)      
+
+
+# add_library(emicp_orig STATIC src/emicp_orig.cu) # TEST
+# set_property(TARGET emicp_orig PROPERTY CUDA_ARCHITECTURES 75)  
+
+
 # set_source_files_properties(src/main.cpp PROPERTIES LANGUAGE CUDA)  # For Debug only
 add_executable(registration  src/main.cpp)
 # set_property(TARGET registration PROPERTY CUDA_ARCHITECTURES 75)    # For Debug only
 
 target_link_libraries(registration
-                    icp data_io icp_cuda -lcublas -lcusolver)
+                    icp data_io icp_cuda emicp_cuda -lcublas -lcusolver)
