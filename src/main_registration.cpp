@@ -9,7 +9,7 @@ Email: pli081@ucr.edu
 #include <sys/time.h>
 #include "Eigen/Eigen"
 #include "icp.h"
-#include "data_io.hpp"
+#include "data_io.h"
 #include <random>
 
 

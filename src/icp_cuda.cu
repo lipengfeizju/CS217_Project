@@ -5,7 +5,7 @@
 #include <iostream>
 #include <numeric>
 #include <cmath>
-#include "icp.h"
+#include "icp_cuda.h"
 #include "Eigen/Eigen"
 #include <assert.h>
 #include <iomanip>

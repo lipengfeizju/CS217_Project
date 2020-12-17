@@ -16,24 +16,22 @@ add_library(data_io SHARED src/data_io.cpp)
 add_library(icp STATIC src/icp.cpp)
 # set_property(TARGET icp PROPERTY CUDA_ARCHITECTURES 75)   # For Debug only
 
-add_library(icp_cuda STATIC src/icp.cu)
+add_library(icp_cuda STATIC src/icp_cuda.cu)
 set_property(TARGET icp_cuda PROPERTY CUDA_ARCHITECTURES 75)       
 
 
-add_library(emicp_cuda STATIC src/emicp.cu)
-set_property(TARGET emicp_cuda PROPERTY CUDA_ARCHITECTURES 75)      
+# add_library(emicp_cuda STATIC src/emicp.cu)
+# set_property(TARGET emicp_cuda PROPERTY CUDA_ARCHITECTURES 75)      
 
 
 # add_library(emicp_orig STATIC src/emicp_orig.cu) # TEST
 # set_property(TARGET emicp_orig PROPERTY CUDA_ARCHITECTURES 75)  
 
-
-# set_source_files_properties(src/main.cpp PROPERTIES LANGUAGE CUDA)  # For Debug only
-add_executable(registration_demo  src/demo.cpp)
+add_executable(registration_demo  src/main_demo.cpp)
 target_link_libraries(registration_demo
                     icp data_io icp_cuda -lcublas -lcusolver)
 
 
-add_executable(registration  src/registration.cpp)
+add_executable(registration  src/main_registration.cpp)
 target_link_libraries(registration
                     icp data_io icp_cuda -lcublas -lcusolver)

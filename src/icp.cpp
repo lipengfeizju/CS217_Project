@@ -1,6 +1,7 @@
 #include <iostream>
 #include <numeric>
 #include "icp.h"
+#include "icp_cuda.h"
 #include "Eigen/Eigen"
 
 #define GPU_VERSION 0

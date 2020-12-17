@@ -7,7 +7,7 @@ A simple demo for ICP algorithm
 #include <sys/time.h>
 #include "Eigen/Eigen"
 #include "icp.h"
-#include "data_io.hpp"
+#include "data_io.h"
 #include <random>
 
 
@@ -15,7 +15,9 @@ A simple demo for ICP algorithm
 using namespace std;
 using namespace Eigen;
 
-
+#define noise_sigma 1e-4    // standard deviation error to be added
+#define translation 1     // max translation of the test set
+#define rotation 1        // max rotation (radians) of the test set
 
 float my_random(void);
 Matrix3d rotation_matrix(Vector3d axis, float theta);

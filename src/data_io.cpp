@@ -1,7 +1,7 @@
 #include <iostream>
 #include <fstream>
 #include "Eigen/Eigen"
-#include "data_io.hpp"
+#include "data_io.h"
 #include <assert.h>
 using namespace Eigen;
 
