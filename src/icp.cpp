@@ -186,7 +186,7 @@ ICP_OUT icp(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B, int max_iteratio
         mean_error = std::accumulate(neighbor.distances.begin(),neighbor.distances.end(),0.0)/neighbor.distances.size();
 
     
-        std::cout << mean_error  << std::endl;
+        std::cout << "Current Mean distance between points pairs: " << mean_error  << std::endl;
         if (abs(prev_error - mean_error) < tolerance){
             break;
         }

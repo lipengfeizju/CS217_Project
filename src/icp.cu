@@ -12,12 +12,14 @@
 #include <unistd.h>
 
 #define BLOCK_SIZE 32
-#define GRID_SIZE 128
+#define GRID_SIZE 2
 
 #include <cublas_v2.h>
 #include <cusolverDn.h>
 
 #include "support.cu"
+
+// #define NN_OPTIMIZE 0 
 
 /***************************      Device Function           ********************************/
 
@@ -29,7 +31,7 @@ __device__ double dist_GPU(float x1, float y1, float z1,
 }
 
 /*****************************      Kernel Function         ******************************/
-
+// Kernal function to find the nearest neighbor 
 __global__ void nearest_neighbor_kernel(const float * src, const float * dst, int src_count, int dst_count, int *best_neighbor, double *best_dist){
     // Kernal function to find the nearest neighbor 
     // src: source point cloud array, (num_pts, 3), stored in ColMajor (similar for dst)
@@ -114,10 +116,51 @@ __global__ void nearest_neighbor_kernel(const float * src, const float * dst, in
     
 }
 
-// __global__ void nearest_neighbor_naive_kernel(const float * src, const float * dst, int src_count, int dst_count, int *best_neighbor, double *best_dist){
-    
-// }
+// Kernal function to find the nearest neighbor 
+__global__ void nearest_neighbor_naive_kernel(const float * src, const float * dst, int src_count, int dst_count, int *best_neighbor, double *best_dist){
+    // Kernal function to find the nearest neighbor 
+    // src: source point cloud array, (num_pts, 3), stored in ColMajor (similar for dst)
+    // best_neighbor: best neigbor index in dst point set
+    // best_dist    : best neigbor distance from src to dst
 
+    // Dynamic reserve shared mem
+    int num_src_pts_per_thread = (src_count - 1)/(gridDim.x * blockDim.x) + 1;
+
+    double current_best_dist = INF;
+    int current_best_neighbor = 0;
+    int current_index_src = 0;
+
+    float x1, y1, z1;
+    float x2, y2, z2;
+    double dist;
+    for(int j = 0; j < num_src_pts_per_thread; j++){
+        current_index_src =  blockIdx.x * blockDim.x * num_src_pts_per_thread + j * blockDim.x + threadIdx.x;
+        if (current_index_src < src_count){
+
+            current_best_dist = INF;
+            current_best_neighbor = 0;
+            x1 = src[current_index_src];
+            y1 = src[current_index_src + src_count];
+            z1 = src[current_index_src + src_count*2];
+
+            for(int current_index_dst = 0; current_index_dst < dst_count; current_index_dst++){
+                x2 = dst[current_index_dst];
+                y2 = dst[current_index_dst + dst_count];
+                z2 = dst[current_index_dst + dst_count*2];
+                dist = dist_GPU(x1, y1, z1, x2, y2, z2);
+                if(dist < current_best_dist){
+                    current_best_dist = dist;
+                    current_best_neighbor = current_index_dst;
+                }
+            }
+
+            best_dist[current_index_src] = current_best_dist;  //INF
+            best_neighbor[current_index_src] = current_best_neighbor; //0
+        }
+    }
+}
+
+// Change point array order given the index array
 __global__ void point_array_chorder(const float *src, const int *indices, int num_points, float *src_chorder){
     int num_point_per_thread = (num_points - 1)/(gridDim.x * blockDim.x) + 1;
     int current_index = 0;
@@ -290,8 +333,14 @@ __host__ void _nearest_neighbor_cuda_warper(const float *src_device, const float
     
     int dyn_size_1 = num_dst_pts_per_thread * BLOCK_SIZE * 3 * sizeof(float);  // memory reserved for shared_points
 
+#ifndef NN_OPTIMIZE
+    nearest_neighbor_naive_kernel<<<GRID_SIZE, BLOCK_SIZE >>>(src_device, dst_device, row_src, row_dst, best_neighbor_device, best_dist_device);
+#elif NN_OPTIMIZE == 0
     nearest_neighbor_kernel<<<GRID_SIZE, BLOCK_SIZE, (dyn_size_1) >>>(src_device, dst_device, row_src, row_dst, best_neighbor_device, best_dist_device);
-
+#elif NN_OPTIMIZE == 1
+    dim3 fullGrids((row_src + BLOCK_SIZE - 1) / BLOCK_SIZE);
+    nearest_neighbor_naive_kernel<<<fullGrids, BLOCK_SIZE >>>(src_device, dst_device, row_src, row_dst, best_neighbor_device, best_dist_device);
+#endif
 }
 
 __host__ void _apply_optimal_transform_cuda_warper(cublasHandle_t handle, cusolverDnHandle_t solver_handle, const float *dst_device, const float *src_device, const int *neighbor_device, const float *ones_device, int num_data_pts,
@@ -478,6 +527,57 @@ __host__ int icp_cuda(const Eigen::MatrixXf &dst,  const Eigen::MatrixXf &src, i
     return iter;
 }
 
+// Host function to prepare data
+__host__ NEIGHBOR nearest_neighbor_cuda(const Eigen::MatrixXf &src, const Eigen::MatrixXf &dst){
+    /*
+    src : src point cloud matrix with size (num_point, 3)
+    dst : dst point cloud matrix with size (num_point, 3)
+    the matrix is stored in ColMajor by default
+    */
+
+    NEIGHBOR neigh;
+    
+    int row_src = src.rows();
+    int row_dst = dst.rows();
+    assert(row_src == row_src);
+    
+    //Initialize Host variables
+    const float *src_host = src.data();
+    const float *dst_host = dst.data();
+    int *best_neighbor_host = (int *)malloc(row_src*sizeof(int)); 
+    double *best_dist_host  = (double *)malloc(row_src*sizeof(double));
+
+    // Initialize Device variables
+    float *src_device, *dst_device;
+    int *best_neighbor_device;
+    double *best_dist_device;
+
+    check_return_status(cudaMalloc((void**)&src_device, 3 * row_src * sizeof(float)));
+    check_return_status(cudaMalloc((void**)&dst_device, 3 * row_dst * sizeof(float)));
+    check_return_status(cudaMalloc((void**)&best_neighbor_device, row_src * sizeof(int)));
+    check_return_status(cudaMalloc((void**)&best_dist_device, row_src * sizeof(double)));
+
+    check_return_status(cudaMemcpy(src_device, src_host, 3 * row_src * sizeof(float), cudaMemcpyHostToDevice));
+    check_return_status(cudaMemcpy(dst_device, dst_host, 3 * row_dst * sizeof(float), cudaMemcpyHostToDevice));
+
+    _nearest_neighbor_cuda_warper(src_device, dst_device, row_src, row_dst, best_dist_device, best_neighbor_device);
+    
+    check_return_status(cudaMemcpy(best_neighbor_host, best_neighbor_device, row_src * sizeof(int), cudaMemcpyDeviceToHost));
+    check_return_status(cudaMemcpy(best_dist_host    , best_dist_device    , row_src * sizeof(double), cudaMemcpyDeviceToHost));
+    
+    for(int i = 0; i < row_src; i++){
+        neigh.distances.push_back(best_dist_host[i]);
+        neigh.indices.push_back(best_neighbor_host[i]);
+    }
+    
+    free(best_neighbor_host);
+    free(best_dist_host);
+    cudaFree(src_device);
+    cudaFree(dst_device);
+    cudaFree(best_neighbor_device);
+    cudaFree(best_dist_device);
+    return neigh;
+}
 
 /*************************************************************************************************/
 /****************************** Single step functions for DEBUG ***********************************/
@@ -575,58 +675,6 @@ __host__ double apply_optimal_transform_cuda(const Eigen::MatrixXf &dst,  const 
     
 
     return 0;
-}
-
-// Host function to prepare data
-__host__ NEIGHBOR nearest_neighbor_cuda(const Eigen::MatrixXf &src, const Eigen::MatrixXf &dst){
-    /*
-    src : src point cloud matrix with size (num_point, 3)
-    dst : dst point cloud matrix with size (num_point, 3)
-    the matrix is stored in ColMajor by default
-    */
-
-    NEIGHBOR neigh;
-    
-    int row_src = src.rows();
-    int row_dst = dst.rows();
-    assert(row_src == row_src);
-    
-    //Initialize Host variables
-    const float *src_host = src.data();
-    const float *dst_host = dst.data();
-    int *best_neighbor_host = (int *)malloc(row_src*sizeof(int)); 
-    double *best_dist_host  = (double *)malloc(row_src*sizeof(double));
-
-    // Initialize Device variables
-    float *src_device, *dst_device;
-    int *best_neighbor_device;
-    double *best_dist_device;
-
-    check_return_status(cudaMalloc((void**)&src_device, 3 * row_src * sizeof(float)));
-    check_return_status(cudaMalloc((void**)&dst_device, 3 * row_dst * sizeof(float)));
-    check_return_status(cudaMalloc((void**)&best_neighbor_device, row_src * sizeof(int)));
-    check_return_status(cudaMalloc((void**)&best_dist_device, row_src * sizeof(double)));
-
-    check_return_status(cudaMemcpy(src_device, src_host, 3 * row_src * sizeof(float), cudaMemcpyHostToDevice));
-    check_return_status(cudaMemcpy(dst_device, dst_host, 3 * row_dst * sizeof(float), cudaMemcpyHostToDevice));
-
-    _nearest_neighbor_cuda_warper(src_device, dst_device, row_src, row_dst, best_dist_device, best_neighbor_device);
-    
-    check_return_status(cudaMemcpy(best_neighbor_host, best_neighbor_device, row_src * sizeof(int), cudaMemcpyDeviceToHost));
-    check_return_status(cudaMemcpy(best_dist_host    , best_dist_device    , row_src * sizeof(double), cudaMemcpyDeviceToHost));
-    
-    for(int i = 0; i < row_src; i++){
-        neigh.distances.push_back(best_dist_host[i]);
-        neigh.indices.push_back(best_neighbor_host[i]);
-    }
-    
-    free(best_neighbor_host);
-    free(best_dist_host);
-    cudaFree(src_device);
-    cudaFree(dst_device);
-    cudaFree(best_neighbor_device);
-    cudaFree(best_dist_device);
-    return neigh;
 }
 
 __host__ double single_step_ICP(const Eigen::MatrixXf &dst,  const Eigen::MatrixXf &src, const NEIGHBOR &neighbor, Eigen::MatrixXf &src_transformed, NEIGHBOR &neighbor_out){

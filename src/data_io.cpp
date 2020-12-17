@@ -69,7 +69,7 @@ void save_tranformation(std::string file_name, Matrix4d& transformation){
     int cols = transformation.cols();
     int rows = transformation.rows();
 
-    out_file << "Transformation:  " << std::endl;
+    // out_file << "Transformation:  " << std::endl;
     if (out_file.is_open())
     {
         for(int i = 0; i < rows; i++){

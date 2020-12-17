@@ -80,8 +80,10 @@ int main(int argc, char *argv[]){
     Matrix3d R1 = T.block<3,3>(0,0);
 
 
-    cout << "mean error is " << mean - 6*noise_sigma << endl << endl;
-    cout << "icp time: " << total_time << endl;
+    cout << "mean error is " << mean  << endl << endl;
+    cout << "iteration: " << iter << endl << endl;
+    cout << "icp time: " << total_time <<  " s" <<endl;
+    cout << "each iteration takes " << total_time/iter << " s" <<endl;
 
     /**********  Reconstruct the point cloud    *************/
 
