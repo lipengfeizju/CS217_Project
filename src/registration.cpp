@@ -34,45 +34,33 @@ unsigned GetTickCount()
 int main(int argc, char *argv[]){
 
 
-    std::random_device rd;
-    std::mt19937 gen(rd());
+    // std::random_device rd;
+    // std::mt19937 gen(rd());
 
-    std::string file_name = "/home/tempmaj/pli/wendy/CS217_Project/data/samples/airplane_0001.txt";
-    MatrixXd pcl_data = load_pcl(file_name);
-    int num_point = pcl_data.rows();
-
-    MatrixXd A = pcl_data;
-    Vector3d t;
-    Matrix3d R;
-    Matrix4d T;    // Transformation result from ICP
-    Vector3d t1;
-    Matrix3d R1;
-    ICP_OUT icp_result;
-    std::vector<float> dist;
-    int iter;
-    float mean;
+    // std::string base_dir = "/home/anny/cuda-workspace/icp_project/icp/data/samples/";
+    // std::cout << base_dir + argv[1] <<std::endl;
+    // MatrixXd A = load_pcl(base_dir + "airplane_0001.txt");    
+    // MatrixXd B = load_pcl(base_dir + "airplane_0001_rotated.txt");
+    MatrixXd A, B;
+    std::string base_dir = "";
+    if (argc == 4){
+        base_dir += argv[1];
+        A = load_pcl(base_dir + argv[2]);
+        B = load_pcl(base_dir + argv[3]);
+    }
+    else{
+        printf("usage: ./registration  path_to_base_dir original_file_path translated_file_path");
+        exit(0);
+    }
+    
 
     float total_time = 0;
     unsigned start, end;
     float interval;
 
-    /***************       Construct Random Matrix B      ******************/
-    MatrixXd B = A;
-    t = Vector3d::Random()*translation;
 
-    for( int jj =0; jj< num_point; jj++){
-        B.block<1,3>(jj,0) = B.block<1,3>(jj,0) + t.transpose();
-    }
-
-    R = rotation_matrix(Vector3d::Random() ,my_random()*rotation);
-    B = (R * B.transpose()).transpose();
-
-    B += MatrixXd::Random(num_point,3) * noise_sigma;
-
-    // shuffle
-    my_random_shuffle(B);
+    ICP_OUT icp_result;
     
-    save_pcl("/home/tempmaj/pli/wendy/CS217_Project/data/samples/airplane_0001_rotated.txt",B);
 
     /******** Calculate ICP ***********/
     start = GetTickCount();
@@ -81,22 +69,21 @@ int main(int argc, char *argv[]){
     interval = float((end - start))/1000;
     total_time += interval;
 
-    T = icp_result.trans;
-    dist = icp_result.distances;
-    iter = icp_result.iter;
-    mean = std::accumulate(dist.begin(),dist.end(),0.0)/dist.size();
+
+    Matrix4d T = icp_result.trans;
+    std::vector<float> dist = icp_result.distances;
+    int iter = icp_result.iter;
+    float mean = std::accumulate(dist.begin(),dist.end(),0.0)/dist.size();
 
 
-    t1 = T.block<3,1>(0,3);
-    R1 = T.block<3,3>(0,0);
+    Vector3d t1 = T.block<3,1>(0,3);
+    Matrix3d R1 = T.block<3,3>(0,0);
 
 
-    cout << "mean error is " << mean - 6*noise_sigma << endl << endl;
-    cout << "icp trans error" << endl << -t1 - t << endl << endl;
-    cout << "icp R error " << endl << R1.inverse() - R << endl << endl;
-    cout << "total iteration is " << iter << endl;
-    
-    cout << "icp time: " << total_time << endl;
+    cout << "mean error is " << mean  << endl << endl;
+    cout << "iteration: " << iter << endl << endl;
+    cout << "icp time: " << total_time <<  " s" <<endl;
+    cout << "each iteration takes " << total_time/iter << " s" <<endl;
 
     /**********  Reconstruct the point cloud    *************/
 
@@ -106,8 +93,10 @@ int main(int argc, char *argv[]){
 
 
     std::cout << "Writing recovered point cloud data to file" << std::endl;
-    save_pcl("/home/tempmaj/pli/wendy/CS217_Project/data/samples/airplane_0001_recovered.txt",D);
+    save_pcl(base_dir + "recovered.txt",D);
 
+    std::cout << "Writing estimated transformation to file" << std::endl;
+    save_tranformation(base_dir + "transformation.txt", T);
     return 0;
 }
 

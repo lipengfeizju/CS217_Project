@@ -2,7 +2,7 @@
 #include <fstream>
 #include "Eigen/Eigen"
 #include "data_io.hpp"
-
+#include <assert.h>
 using namespace Eigen;
 
 
@@ -11,8 +11,13 @@ MatrixXd load_pcl(std::string file_name, int col ){
     int counter = 0;
 
     std::ifstream point_cloud_file(file_name);
+    if (!point_cloud_file.good()){
+        std::cout << "File not found:  " << file_name << std::endl;
+        exit(0);
+    }
+    
+
     std::string line;
-    printf("OPENING MODEL \n");
     double buffer[MAXBUFSIZE];
 
     std::string temp;
@@ -34,6 +39,7 @@ MatrixXd load_pcl(std::string file_name, int col ){
             pcl_matrix(i,j) = buffer[col*i + j];
     }
 
+    std::cout << "MODEL OPENED FROM: " << file_name << std::endl;
     return pcl_matrix;
 }
 
@@ -54,6 +60,28 @@ void save_pcl(std::string file_name, MatrixXd& pcl_data){
         }
         pcl_file.close();
     }
-    else std::cout << "Unable to open file";
+    else std::cout << "Unable to open file  " << file_name << std::endl;
+
+}
+
+void save_tranformation(std::string file_name, Matrix4d& transformation){
+    std::ofstream out_file (file_name);
+    int cols = transformation.cols();
+    int rows = transformation.rows();
+
+    // out_file << "Transformation:  " << std::endl;
+    if (out_file.is_open())
+    {
+        for(int i = 0; i < rows; i++){
+            for(int j = 0; j < cols-1; j++){
+                out_file << transformation(i,j) << ", ";
+            }
+            out_file << transformation(i,cols-1);
+            if(i < rows -1)
+                out_file << std::endl;
+        }
+        out_file.close();
+    }
+    else std::cout << "Unable to open file  " << file_name << std::endl;
 
 }

@@ -20,12 +20,16 @@ For Mac Users, CLion is recommended for debugging CPU part.
 
 
 ## 2. Demo
-First we run the C++ module to get ICP result
+If you have a GUI, simply run
+```shell
+python demo.py
+```
+
+If you don't have a GUI, first we run the C++ module to get ICP result (Not recommended)
 ```shell
 ./build/registration
 ```
-
-Then we run the python code to visualize the result
+Then we copy the files and run the python code to visualize the result
 
 ## 3. Configure Workspace
 Nsight Eclipse is the default and best IDE to debug CUDA applications as far as I know. It also works perfectly with nvprof to show the porfiling results. The following steps show how to import this project into Nsight Eclipse
@@ -62,4 +66,23 @@ Then you have to tell Eclipse what binary to run and what project to compile.
 
 Then, enjoy the IDE.
 
+## 4. Nvidia Profiling
+It seems that by default, non-root user don't have permision to profile GPU. If you can't profile, please try the followings:
+
+### 4.1 Unload Old modules
+```shell
+systemctl isolate multi-user # Stop the window manager.
+sudo modprobe -r nvidia_uvm nvidia_drm nvidia
+# modprobe -r nvidia_uvm nvidia_drm nvidia_modeset nvidia-vgpu-vfio nvidia # Unload dependent modules
+```
+
+### 4.2 Allow all users to profile
+```shell
+sudo modprobe nvidia NVreg_RestrictProfilingToAdminUsers=0
+```
+
+### 4.3 Restart Windows Manager(GUI)
+```shell
+systemctl isolate graphical
+```
 
