@@ -11,15 +11,15 @@
 #include <iomanip>
 #include <unistd.h>
 
-#define BLOCK_SIZE 32
-#define GRID_SIZE 2
+#define BLOCK_SIZE 64
+#define GRID_SIZE 128
 
 #include <cublas_v2.h>
 #include <cusolverDn.h>
 
 #include "support.cu"
 
-// #define NN_OPTIMIZE 0 
+#define NN_OPTIMIZE 1 
 
 /***************************      Device Function           ********************************/
 

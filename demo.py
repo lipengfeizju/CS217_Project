@@ -34,6 +34,6 @@ def random_transform_data(object_name = "airplane_0004"):
     print("Random transformation generated")
 
 if __name__ == "__main__":
-    random_transform_data("car_0001")
-    main("car_0001")
+    random_transform_data("airplane_0001")
+    main("airplane_0001")
     

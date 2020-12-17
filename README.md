@@ -20,12 +20,16 @@ For Mac Users, CLion is recommended for debugging CPU part.
 
 
 ## 2. Demo
-First we run the C++ module to get ICP result
+If you have a GUI, simply run
+```shell
+python demo.py
+```
+
+If you don't have a GUI, first we run the C++ module to get ICP result (Not recommended)
 ```shell
 ./build/registration
 ```
-
-Then we run the python code to visualize the result
+Then we copy the files and run the python code to visualize the result
 
 ## 3. Configure Workspace
 Nsight Eclipse is the default and best IDE to debug CUDA applications as far as I know. It also works perfectly with nvprof to show the porfiling results. The following steps show how to import this project into Nsight Eclipse
