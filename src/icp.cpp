@@ -3,7 +3,7 @@
 #include "icp.h"
 #include "Eigen/Eigen"
 
-#define GPU_VERSION 0
+#define USE_GPU
 using namespace std;
 
 void verify(NEIGHBOR neigbor1, NEIGHBOR neigbor2){
@@ -53,30 +53,31 @@ void verify(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B){
 
 ICP_OUT icp(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B, int max_iterations, float tolerance){
     int row = A.rows();
-#ifndef GPU_VERSION
-    Eigen::MatrixXd src3d = A.transpose();
-    Eigen::MatrixXd dst = B.transpose();
-    Eigen::MatrixXd dst_chorder = Eigen::MatrixXd::Ones(3,row);
-    Eigen::MatrixXd src = Eigen::MatrixXd::Ones(3+1,row);
-    src(Eigen::seqN(0,3), Eigen::all) = A.transpose();
-#else
+#ifdef USE_GPU
     Eigen::MatrixXf src3df = A.cast<float>().transpose();
     Eigen::MatrixXf dst   = B.cast<float>().transpose();
-    Eigen::MatrixXf dst_chorder = Eigen::MatrixXf::Ones(3,row);
     Eigen::MatrixXf src = Eigen::MatrixXf::Ones(3+1,row);
     src(Eigen::seqN(0,3), Eigen::all) = src3df;
     Eigen::MatrixXd src3d = src3df.cast<double>();
     Eigen::MatrixXf src_next = Eigen::MatrixXf::Ones(row, 4);// free to change
+#else
+    Eigen::MatrixXd src3d = A.transpose();
+    Eigen::MatrixXd dst = B.transpose();
+    Eigen::MatrixXd src = Eigen::MatrixXd::Ones(3+1,row);
+    src(Eigen::seqN(0,3), Eigen::all) = A.transpose();
 #endif
 
     NEIGHBOR neighbor, neighbor_next;
     Eigen::Matrix4d T;
-    
+    Eigen::MatrixXd dst_chorder = Eigen::MatrixXd::Ones(3,row);
     ICP_OUT result;
     int iter = 0;
 
-
-#ifndef GPU_VERSION
+#ifdef USE_GPU
+    iter = icp_cuda(dst.transpose(),  src3df.transpose(), max_iterations, tolerance, src_next, neighbor);
+    src(Eigen::all, Eigen::all) = src_next.transpose();
+    src3d(Eigen::all, Eigen::all) = src(Eigen::seqN(0,3), Eigen::all).cast<double>();
+#else
     double prev_error = 0;
     double mean_error = 0;
     neighbor = nearest_neighbor(src3d.transpose(), dst.transpose());
@@ -84,6 +85,8 @@ ICP_OUT icp(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B, int max_iteratio
     prev_error = std::accumulate(neighbor.distances.begin(),neighbor.distances.end(),0.0)/neighbor.distances.size();
 
     for (int i=0; i<max_iterations; i++){
+
+        
 
         dst_chorder(Eigen::seqN(0,3), Eigen::all) = dst(Eigen::seqN(0,3), neighbor.indices);
     
@@ -137,69 +140,6 @@ ICP_OUT icp(const Eigen::MatrixXd &A, const Eigen::MatrixXd &B, int max_iteratio
         iter = i+2;
     }
     std::cout << tolerance << std::endl;
-
-#elif GPU_VERSION == 0
-    // Vanilla version only replace nearest neighbor function
-    double prev_error = 0;
-    double mean_error = 0;
-    neighbor = nearest_neighbor_cuda(src3df.transpose(), dst.transpose());
-    prev_error = std::accumulate(neighbor.distances.begin(),neighbor.distances.end(),0.0)/neighbor.distances.size();
-    for (int i=0; i<max_iterations; i++){
-        dst_chorder(Eigen::seqN(0,3), Eigen::all) = dst(Eigen::seqN(0,3), neighbor.indices);
-
-        Eigen::Vector3f centroid_A(0,0,0);
-        Eigen::Vector3f centroid_B(0,0,0);
-        Eigen::MatrixXf A_zm = src3df.transpose(); // Zero mean version of A
-        Eigen::MatrixXf B_zm = dst_chorder.transpose(); // Zero mean version of B
-        int row = src3d.cols();
-
-        centroid_A = src3df.rowwise().sum() / row;
-        centroid_B = dst_chorder.rowwise().sum() / row;
-
-        Eigen::MatrixXd H = (A_zm.transpose()*B_zm).cast<double>();
-
-        Eigen::JacobiSVD<Eigen::MatrixXd> svd(H, Eigen::ComputeFullU | Eigen::ComputeFullV);
-        Eigen::MatrixXd U = svd.matrixU();
-        Eigen::VectorXd S = svd.singularValues();
-        Eigen::MatrixXd V = svd.matrixV();
-        Eigen::MatrixXd Vt = V.transpose();
-
-        Eigen::Matrix3d R = Vt.transpose()*U.transpose();
-
-
-        if (R.determinant() < 0 ){
-            Vt.block<1,3>(2,0) *= -1;
-            R = Vt.transpose()*U.transpose();
-        }
-        Eigen::MatrixXd t = (centroid_B.cast<double>()) - R*(centroid_A.cast<double>());
-
-        Eigen::Matrix4d T = Eigen::MatrixXd::Identity(4,4);
-        T.block<3,3>(0,0) = R;
-        T.block<3,1>(0,3) = t;
-        src = T.cast<float>()*src;
-
-        src3df = src(Eigen::seqN(0,3), Eigen::all);
-
-        neighbor = nearest_neighbor_cuda(src3df.transpose(), dst.transpose());
-        mean_error = std::accumulate(neighbor.distances.begin(),neighbor.distances.end(),0.0)/neighbor.distances.size();
-
-    
-        std::cout << mean_error  << std::endl;
-        if (abs(prev_error - mean_error) < tolerance){
-            break;
-        }
-        // Calculate mean error and compare with previous error
-        
-        prev_error = mean_error;
-        iter = i+2;
-    }
-    src3d(Eigen::all, Eigen::all) = src(Eigen::seqN(0,3), Eigen::all).cast<double>();
-
-#elif GPU_VERSION == 1
-    // Put all functions to CUDA
-    iter = icp_cuda(dst.transpose(),  src3df.transpose(), max_iterations, tolerance, src_next, neighbor);
-    src(Eigen::all, Eigen::all) = src_next.transpose();
-    src3d(Eigen::all, Eigen::all) = src(Eigen::seqN(0,3), Eigen::all).cast<double>();
 #endif
 
     T = transform_SVD(A,src3d.transpose());
