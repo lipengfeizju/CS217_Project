@@ -4,7 +4,7 @@
 #include <sys/time.h>
 #include "Eigen/Eigen"
 #include "icp.h"
-#include "data_io.hpp"
+#include "data_io.h"
 #include <random>
 #include "emicp.h"
 
@@ -12,6 +12,9 @@
 using namespace std;
 using namespace Eigen;
 
+#define noise_sigma 1e-4    // standard deviation error to be added
+#define translation 1     // max translation of the test set
+#define rotation 1        // max rotation (radians) of the test set
 
 
 float my_random(void);
@@ -37,7 +40,8 @@ int main(int argc, char *argv[]){
     std::random_device rd;
     std::mt19937 gen(rd());
 
-    std::string file_name = "/home/tempmaj/pli/wendy/CS217_Project/data/samples/airplane_0001.txt";
+    std::string base_dir = "/home/anny/cuda-workspace/icp_project/icp/";
+    std::string file_name = base_dir + "data/samples/airplane_0001.txt";
     
     MatrixXd pcl_data = load_pcl(file_name);
     int num_point = pcl_data.rows();
@@ -73,7 +77,7 @@ int main(int argc, char *argv[]){
     // shuffle
     my_random_shuffle(B);
     
-    save_pcl("/home/tempmaj/pli/wendy/CS217_Project/data/samples/airplane_0001_rotated.txt",B);
+    save_pcl(base_dir+"data/samples/airplane_0001_rotated.txt",B);
 
     /******** Calculate ICP ***********/
     // Eigen::MatrixXf src3df = A.cast<float>();
@@ -81,7 +85,7 @@ int main(int argc, char *argv[]){
     Eigen::MatrixXf cloud_source = B.cast<float>();
 
     Vector3f t1;
-    Matrix3f R1;
+    Matrix3f R1 = MatrixXf::Identity(3,3);
     start = GetTickCount();
     emicp(cloud_target, cloud_source, R1.data(), t1.data());
     // icp_result = icp(B, A, 50,  1e-6);

@@ -11,6 +11,7 @@
 #include <cusolverDn.h>
 #include "support.cu"
 #include "emicp.h"
+#include <Eigen/Dense>
 #define BLOCK_SIZE 32
 #define GRID_SIZE 128
 
@@ -284,9 +285,21 @@ void findRTfromS(const float* h_Xc, const float* h_Yc, const float* h_S, float* 
   // compute the eigenvector corresponding the largest eigenvalue
   // eigenvectorOfN(N, q);
   // Eigen::ComplexEigenSolver<Eigen::Matrix<std::complex<double>, 2,2> > s(A);
-  Eigen::MatrixXd newN = Eigen::Map<Eigen::MatrixXd>(N, 4, 4);
-  Eigen::Matrix<std::complex<double>, 4,4> s(newN);
-  s.eigenvalues();
+  // Eigen::MatrixXd newN = Eigen::Map<Eigen::MatrixXd>(N, 4, 4);
+  // Eigen::Matrix<std::complex<double>, 4,4> s(newN);
+  // s.eigenvalues();
+  for(int i =0; i<16; i++) N[i] = 1+2*i;
+  Eigen::MatrixXd A_test = Eigen::Map<Eigen::Matrix<double, 4, 4> >(N);
+  Eigen::EigenSolver <Eigen::MatrixXd> eigensolver(A_test);
+  if (eigensolver.info() != Eigen::Success) abort();
+   std::cout << "The eigenvalues of A are:\n" << eigensolver.eigenvalues() << std::endl;
+   std::cout << "Here's a matrix whose columns are eigenvectors of A \n"
+        << "corresponding to these eigenvalues:\n"
+        << eigensolver.eigenvectors() << std::endl;
+  // std::cout << aaaa<< std::endl;
+  // for(int n=0;n<16;n++) std::cout << N[n] << ", "<<std::endl;
+  printf("So far so good\n");
+  exit(0);
 
   float q0 = q[0], qx = q[1], qy = q[2], qz = q[3];
 
