@@ -1,5 +1,14 @@
 # CS217_Project
-Point Cloud Classification
+
+Point cloud registration is the process of finding a transformation to align two geometric point sets. A classic algorithm to achieve this goal is called Iterative Closest Point (ICP). Since the ICP algorithm can be sped up with parallel programming, in this project we will implement ICP with CUDA. 
+
+The program code is split into two parts, the ICP algorithm module and the visualization module. In the runtime, we first generate a random rotation and translation to transform the original point clouds, then shuffle the points and save the result to a csv file. Then the ICP module reads the files containing the original point cloud and the transform one. Then ICP does the calculation and saves the estimated transformation and recovered point cloud to two csv files. Finally, the visualization module reads files containing the original point cloud, the transformed one, and the recovered one, and visualizes all the three point clouds. If there is no GUI on the machine, the visualization module can be skipped.
+
+
+Keyword: ICP, CUDA
+
+
+
 
 ## 1. Setup
 Conda is recommended to config this repo, more details about Miniconda can be found [here](https://docs.conda.io/en/latest/miniconda.html)
