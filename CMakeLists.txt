@@ -19,14 +19,6 @@ add_library(icp STATIC src/icp.cpp)
 add_library(icp_cuda STATIC src/icp_cuda.cu)
 set_property(TARGET icp_cuda PROPERTY CUDA_ARCHITECTURES 75)       
 
-
-add_library(emicp_cuda STATIC src/emicp.cu)
-set_property(TARGET emicp_cuda PROPERTY CUDA_ARCHITECTURES 75)      
-
-
-# add_library(emicp_orig STATIC src/emicp_orig.cu) # TEST
-# set_property(TARGET emicp_orig PROPERTY CUDA_ARCHITECTURES 75)  
-
 add_executable(registration_demo  src/main_demo.cpp)
 target_link_libraries(registration_demo
                     icp data_io icp_cuda -lcublas -lcusolver)
@@ -36,7 +28,3 @@ add_executable(registration  src/main_registration.cpp)
 target_link_libraries(registration
                     icp data_io icp_cuda -lcublas -lcusolver)
 
-
-add_executable(emicp_main  src/main_emicp.cpp)
-target_link_libraries(emicp_main
-                    icp data_io emicp_cuda -lcublas -lcusolver)
