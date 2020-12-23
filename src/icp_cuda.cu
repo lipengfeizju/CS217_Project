@@ -331,11 +331,11 @@ __host__ void _nearest_neighbor_cuda_warper(const float *src_device, const float
 
     int num_dst_pts_per_thread = (row_dst - 1)/(GRID_SIZE * BLOCK_SIZE) + 1;
     
-    int dyn_size_1 = num_dst_pts_per_thread * BLOCK_SIZE * 3 * sizeof(float);  // memory reserved for shared_points
 
 #ifndef NN_OPTIMIZE
     nearest_neighbor_naive_kernel<<<GRID_SIZE, BLOCK_SIZE >>>(src_device, dst_device, row_src, row_dst, best_neighbor_device, best_dist_device);
 #elif NN_OPTIMIZE == 0
+    int dyn_size_1 = num_dst_pts_per_thread * BLOCK_SIZE * 3 * sizeof(float);  // memory reserved for shared_points
     nearest_neighbor_kernel<<<GRID_SIZE, BLOCK_SIZE, (dyn_size_1) >>>(src_device, dst_device, row_src, row_dst, best_neighbor_device, best_dist_device);
 #elif NN_OPTIMIZE == 1
     dim3 fullGrids((row_src + BLOCK_SIZE - 1) / BLOCK_SIZE);
