@@ -1,4 +1,4 @@
-# CS217_Project
+# Course Project for CS/EE 217 GPU Architecture and Parallel Programming - Fall 2020 
 
 Point cloud registration is the process of finding a transformation to align two geometric point sets. A classic algorithm to achieve this goal is called Iterative Closest Point (ICP). Since the ICP algorithm can be sped up with parallel programming, in this project we will implement ICP with CUDA. 
 
